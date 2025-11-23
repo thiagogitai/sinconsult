@@ -1,0 +1,595 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Plus, 
+  Play, 
+  Pause, 
+  Edit, 
+  Trash2, 
+  Eye, 
+  Clock,
+  MessageSquare,
+  Users,
+  BarChart3,
+  Settings,
+  Download,
+  Upload,
+  Volume2
+} from 'lucide-react';
+import { campaignsAPI, segmentsAPI } from '../services/api';
+
+const Campaigns: React.FC = () => {
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [segments, setSegments] = useState<any[]>([]);
+  const [savedTTSFiles, setSavedTTSFiles] = useState<any[]>([]); // Novo estado para arquivos TTS salvos
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    message: '',
+    type: 'text',
+    segment_id: '',
+    schedule: '',
+    use_tts: false,
+    tts_config_id: '',
+    tts_audio_file: '' // Novo campo para arquivo de áudio TTS salvo
+  });
+
+  useEffect(() => {
+    fetchCampaigns();
+    fetchSegments();
+    fetchSavedTTSFiles(); // Buscar arquivos TTS salvos
+  }, []);
+
+  const fetchSavedTTSFiles = async () => {
+    try {
+      const response = await fetch('/api/tts/files');
+      const data = await response.json();
+      if (response.ok) {
+        setSavedTTSFiles(data.files || []);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar arquivos TTS salvos:', error);
+    }
+  };
+
+  const fetchCampaigns = async () => {
+    try {
+      setLoading(true);
+      const response = await campaignsAPI.getAll();
+      setCampaigns(response.data.campaigns || []);
+    } catch (error) {
+      console.error('Erro ao carregar campanhas:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSegments = async () => {
+    try {
+      const response = await segmentsAPI.getAll();
+      setSegments(response.data || []);
+    } catch (error) {
+      console.error('Erro ao carregar segmentos:', error);
+    }
+  };
+
+  const handleCreateCampaign = async () => {
+    try {
+      const campaignData = {
+        name: formData.name,
+        message: formData.message,
+        type: formData.type,
+        segment_id: formData.segment_id,
+        scheduled_time: formData.schedule,
+        use_tts: formData.use_tts,
+        tts_config_id: formData.use_tts ? formData.tts_config_id : null,
+        tts_audio_file: formData.use_tts && formData.tts_audio_file ? formData.tts_audio_file : null // Incluir arquivo de áudio TTS
+      };
+
+      await campaignsAPI.create(campaignData);
+      setShowModal(false);
+      setFormData({
+        name: '',
+        message: '',
+        type: 'text',
+        segment_id: '',
+        schedule: '',
+        use_tts: false,
+        tts_config_id: '',
+        tts_audio_file: ''
+      });
+      fetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao criar campanha:', error);
+      alert('Erro ao criar campanha. Tente novamente.');
+    }
+  };
+
+  const handleEditCampaign = (campaign: any) => {
+    setEditingCampaign(campaign);
+    setFormData({
+      name: campaign.name,
+      message: campaign.message,
+      type: campaign.type,
+      segment_id: campaign.segment_id || '',
+      schedule: campaign.scheduled_time || '',
+      use_tts: campaign.use_tts || false,
+      tts_config_id: campaign.tts_config_id || '',
+      tts_audio_file: campaign.tts_audio_file || ''
+    });
+    setShowModal(true);
+  };
+
+  const handleUpdateCampaign = async () => {
+    if (!editingCampaign) return;
+
+    try {
+      const campaignData = {
+        name: formData.name,
+        message: formData.message,
+        type: formData.type,
+        segment_id: formData.segment_id,
+        scheduled_time: formData.schedule,
+        use_tts: formData.use_tts,
+        tts_config_id: formData.use_tts ? formData.tts_config_id : null,
+        tts_audio_file: formData.use_tts && formData.tts_audio_file ? formData.tts_audio_file : null
+      };
+
+      await campaignsAPI.update(editingCampaign.id, campaignData);
+      setShowModal(false);
+      setEditingCampaign(null);
+      setFormData({
+        name: '',
+        message: '',
+        type: 'text',
+        segment_id: '',
+        schedule: '',
+        use_tts: false,
+        tts_config_id: '',
+        tts_audio_file: ''
+      });
+      fetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao atualizar campanha:', error);
+      alert('Erro ao atualizar campanha. Tente novamente.');
+    }
+  };
+
+  const handleDeleteCampaign = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta campanha?')) return;
+
+    try {
+      await campaignsAPI.delete(id);
+      fetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao excluir campanha:', error);
+      alert('Erro ao excluir campanha. Tente novamente.');
+    }
+  };
+
+  const handleStartCampaign = async (id: string) => {
+    try {
+      await campaignsAPI.start(id);
+      fetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao iniciar campanha:', error);
+      alert('Erro ao iniciar campanha. Tente novamente.');
+    }
+  };
+
+  const handlePauseCampaign = async (id: string) => {
+    try {
+      await campaignsAPI.pause(id);
+      fetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao pausar campanha:', error);
+      alert('Erro ao pausar campanha. Tente novamente.');
+    }
+  };
+
+  const handleStopCampaign = async (id: string) => {
+    try {
+      await campaignsAPI.stop(id);
+      fetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao parar campanha:', error);
+      alert('Erro ao parar campanha. Tente novamente.');
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'running':
+        return 'bg-gray-100 text-gray-800';
+      case 'scheduled':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'paused':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'Concluída';
+      case 'running':
+        return 'Em Andamento';
+      case 'scheduled':
+        return 'Agendada';
+      case 'paused':
+        return 'Pausada';
+      default:
+        return status;
+    }
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'text':
+        return <MessageSquare className="h-4 w-4" />;
+      case 'audio':
+        return <Volume2 className="h-4 w-4" />;
+      default:
+        return <MessageSquare className="h-4 w-4" />;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+        <span className="ml-2 text-gray-600">Carregando campanhas...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header - Estilo Clean Importar Excel */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-8">
+        <div className="flex items-center justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center">
+                <MessageSquare className="h-8 w-8 text-gray-700" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold text-gray-900">Campanhas de Mensagens</h1>
+                <p className="text-gray-600 text-xl font-light mt-1">Gerenciamento Inteligente de Comunicação</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-6">
+              <div className="flex items-center space-x-2 bg-gray-50 px-4 py-2 rounded-full">
+                <Clock className="h-4 w-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">Agendamento Inteligente</span>
+              </div>
+              <div className="flex items-center space-x-2 bg-gray-50 px-4 py-2 rounded-full">
+                <Users className="h-4 w-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">Segmentação Avançada</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setEditingCampaign(null);
+              setFormData({
+                name: '',
+                message: '',
+                type: 'text',
+                segment_id: '',
+                schedule: '',
+                use_tts: false,
+                tts_config_id: '',
+                tts_audio_file: ''
+              });
+              setShowModal(true);
+            }}
+            className="bg-gray-700 text-white hover:bg-gray-800 px-6 py-3 rounded-lg flex items-center space-x-2 transition-colors font-semibold shadow-lg"
+          >
+            <Plus className="h-5 w-5" />
+            <span>Nova Campanha</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Cards - Estilo Sim Consult Profissional */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-gray-600">Total de Campanhas</p>
+              <p className="text-2xl font-bold text-gray-900">{campaigns.length}</p>
+              <p className="text-xs text-gray-500">Campanhas criadas</p>
+            </div>
+            <div className="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center">
+              <MessageSquare className="h-6 w-6 text-white" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-gray-600">Em Andamento</p>
+              <p className="text-2xl font-bold text-gray-900">{campaigns.filter(c => c.status === 'running').length}</p>
+              <p className="text-xs text-gray-500">Campanhas ativas</p>
+            </div>
+            <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
+              <Clock className="h-6 w-6 text-white" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-gray-600">Concluídas</p>
+              <p className="text-2xl font-bold text-gray-900">{campaigns.filter(c => c.status === 'completed').length}</p>
+              <p className="text-xs text-gray-500">Campanhas finalizadas</p>
+            </div>
+            <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
+              <BarChart3 className="h-6 w-6 text-white" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-gray-600">Taxa de Sucesso</p>
+              <p className="text-2xl font-bold text-gray-900">94.2%</p>
+              <p className="text-xs text-gray-500">Taxa de entrega</p>
+            </div>
+            <div className="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center">
+              <Users className="h-6 w-6 text-white" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Campaigns List - Estilo Sim Consult Profissional */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <h2 className="text-lg font-semibold text-gray-900">Lista de Campanhas</h2>
+          <p className="text-sm text-gray-500 mt-1">Gerencie suas campanhas de mensagens</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Campanha</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Horário</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progresso</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {campaigns.map((campaign) => (
+                <tr key={campaign.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold text-gray-900">{campaign.name}</div>
+                      <div className="text-sm text-gray-500 truncate max-w-xs">{campaign.message}</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center text-sm text-gray-900">
+                      {getTypeIcon(campaign.type)}
+                      <span className="ml-2 capitalize font-medium">{campaign.type}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(campaign.status)}`}>
+                      {getStatusText(campaign.status)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                    {campaign.schedule}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>{campaign.total_sent || 0} enviadas</span>
+                        <span>{campaign.total_target > 0 ? Math.round(((campaign.total_sent || 0) / campaign.total_target) * 100) : 0}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${campaign.total_target > 0 ? ((campaign.total_sent || 0) / campaign.total_target) * 100 : 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex items-center space-x-2">
+                      {campaign.status === 'scheduled' && (
+                        <button
+                          onClick={() => handleStartCampaign(campaign.id)}
+                          className="p-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg transition-colors"
+                          title="Iniciar Campanha"
+                        >
+                          <Play className="h-4 w-4" />
+                        </button>
+                      )}
+                      {campaign.status === 'running' && (
+                        <button
+                          onClick={() => handlePauseCampaign(campaign.id)}
+                          className="p-2 bg-yellow-100 text-yellow-700 hover:bg-yellow-200 rounded-lg transition-colors"
+                          title="Pausar Campanha"
+                        >
+                          <Pause className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleEditCampaign(campaign)}
+                        className="p-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                        title="Editar Campanha"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCampaign(campaign.id)}
+                        className="p-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-colors"
+                        title="Excluir Campanha"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Create/Edit Campaign Modal - Estilo Sim Consult Profissional */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gray-700 rounded-lg flex items-center justify-center">
+                  <MessageSquare className="h-5 w-5 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {editingCampaign ? 'Editar Campanha' : 'Criar Nova Campanha'}
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <span className="sr-only">Fechar</span>
+                ×
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Nome da Campanha</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                  placeholder="Ex: Campanha Matinal - Nutrição"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo de Mensagem</label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                  >
+                    <option value="text">Texto</option>
+                    <option value="audio">Áudio (TTS)</option>
+                    <option value="image">Imagem</option>
+                    <option value="video">Vídeo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Segmento</label>
+                  <select
+                    value={formData.segment_id}
+                    onChange={(e) => setFormData({ ...formData, segment_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                  >
+                    <option value="">Selecione um segmento</option>
+                    {segments.map(segment => (
+                      <option key={segment.id} value={segment.id}>{segment.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Horário de Envio</label>
+                <input
+                  type="datetime-local"
+                  value={formData.schedule}
+                  onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    checked={formData.use_tts}
+                    onChange={(e) => setFormData({ ...formData, use_tts: e.target.checked })}
+                    className="w-4 h-4 text-gray-700 border-gray-300 rounded focus:ring-gray-500"
+                  />
+                  <div>
+                    <span className="text-sm font-semibold text-gray-700">Usar Texto-para-Áudio (TTS)</span>
+                    <p className="text-xs text-gray-500">Transforme texto em áudio automaticamente</p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Importar Áudio TTS Salvo */}
+              {formData.use_tts && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Importar Áudio TTS Salvo</label>
+                  <select
+                    value={formData.tts_audio_file}
+                    onChange={(e) => setFormData({ ...formData, tts_audio_file: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                  >
+                    <option value="">Selecione um áudio TTS salvo</option>
+                    {savedTTSFiles.map((file) => (
+                      <option key={file.id} value={file.filename}>
+                        {file.texto_original} - {file.duracao}s
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Escolha um áudio previamente gerado no TTS ou digite o texto para gerar um novo
+                  </p>
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Mensagem</label>
+                <textarea
+                  value={formData.message}
+                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                  rows={5}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                  placeholder="Digite sua mensagem aqui... Use {nome} para personalizar com o nome do contato."
+                />
+                <p className="text-xs text-gray-500 mt-2">Caracteres: {formData.message.length}</p>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-8">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-6 py-3 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={editingCampaign ? handleUpdateCampaign : handleCreateCampaign}
+                className="px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 font-semibold transition-colors shadow-lg"
+              >
+                {editingCampaign ? 'Atualizar Campanha' : 'Criar Campanha'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Campaigns;

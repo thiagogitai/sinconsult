@@ -1,0 +1,144 @@
+/* Estilos personalizados para Sim Consult - Layout Profissional */
+
+:root {
+  /* Cores principais Sim Consult - Verde Corporativo */
+  --sim-green-dark: #065f46;
+  --sim-green-medium: #047857;
+  --sim-green-primary: #10b981;
+  --sim-green-light: #34d399;
+  --sim-green-lighter: #6ee7b7;
+  
+  /* Cores de apoio */
+  --sim-blue-accent: #3b82f6;
+  --sim-gray-dark: #1f2937;
+  --sim-gray-medium: #6b7280;
+  --sim-gray-light: #f3f4f6;
+  
+  /* Gradientes */
+  --sim-gradient-primary: linear-gradient(135deg, var(--sim-green-dark), var(--sim-green-primary));
+  --sim-gradient-light: linear-gradient(135deg, var(--sim-green-primary), var(--sim-green-light));
+  --sim-gradient-accent: linear-gradient(135deg, var(--sim-green-primary), var(--sim-blue-accent));
+}
+
+/* Estilos de fundo premium */
+.sim-consult-bg {
+  background: linear-gradient(135deg, 
+    rgba(6, 95, 70, 0.95) 0%, 
+    rgba(16, 185, 129, 0.9) 50%, 
+    rgba(52, 211, 153, 0.85) 100%
+  );
+  backdrop-filter: blur(10px);
+}
+
+.sim-consult-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Botões premium */
+.sim-consult-btn-primary {
+  background: var(--sim-gradient-primary);
+  border: none;
+  color: white;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3);
+}
+
+.sim-consult-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(16, 185, 129, 0.4);
+}
+
+.sim-consult-btn-secondary {
+  background: transparent;
+  border: 2px solid var(--sim-green-primary);
+  color: var(--sim-green-primary);
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.sim-consult-btn-secondary:hover {
+  background: var(--sim-green-primary);
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* Cards com efeito hover premium */
+.sim-consult-hover-card {
+  transition: all 0.3s ease;
+  border: 1px solid rgba(16, 185, 129, 0.1);
+}
+
+.sim-consult-hover-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* Textos com gradiente */
+.sim-consult-gradient-text {
+  background: var(--sim-gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Animações suaves */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.sim-consult-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Elementos decorativos */
+.sim-consult-decoration {
+  position: absolute;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--sim-green-light), var(--sim-green-lighter));
+  opacity: 0.1;
+  filter: blur(40px);
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--sim-gray-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sim-green-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sim-green-dark);
+}
+
+/* Loading animado */
+.sim-consult-loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--sim-green-primary);
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
