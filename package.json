@@ -7,7 +7,7 @@
     "client:dev": "vite",
     "build": "tsc -b --skipLibCheck && vite build",
     "build:frontend": "vite build",
-    "build:server": "tsc api/server.ts --outDir dist-server --module esnext --target es2020 --moduleResolution node --esModuleInterop",
+    "build:server": "tsc --project tsconfig.server.json",
     "build:production": "npm run build && npm run build:server",
     "start": "node dist-server/api/server.js",
     "start:ts": "tsx api/server.ts",
