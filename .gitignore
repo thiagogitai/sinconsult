@@ -28,6 +28,8 @@ dist-ssr
 .env
 .env.local
 .env.production
+# Permitir .env.example
+!.env.example
 
 # Database
 data/*.db
