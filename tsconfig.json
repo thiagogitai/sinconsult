@@ -36,5 +36,10 @@
   "include": [
     "src",
     "api"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "api/services/evolution-mock.ts"
   ]
 }
