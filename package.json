@@ -6,11 +6,15 @@
   "scripts": {
     "client:dev": "vite",
     "build": "tsc -b && vite build",
+    "build:server": "tsc api/server.ts --outDir dist-server --module esnext --target es2020 --moduleResolution node --esModuleInterop",
+    "start": "node dist-server/api/server.js",
+    "start:ts": "tsx api/server.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "server:dev": "nodemon",
-    "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
+    "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
+    "postinstall": "npm run build"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.0",
