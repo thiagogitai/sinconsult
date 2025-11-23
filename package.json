@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "client:dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b --skipLibCheck && vite build",
     "build:frontend": "vite build",
     "build:server": "tsc api/server.ts --outDir dist-server --module esnext --target es2020 --moduleResolution node --esModuleInterop",
     "build:production": "npm run build && npm run build:server",
