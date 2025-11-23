@@ -7,14 +7,16 @@
     "client:dev": "vite",
     "build": "tsc -b && vite build",
     "build:server": "tsc api/server.ts --outDir dist-server --module esnext --target es2020 --moduleResolution node --esModuleInterop",
+    "build:production": "npm run build && npm run build:server",
     "start": "node dist-server/api/server.js",
     "start:ts": "tsx api/server.ts",
+    "start:production": "NODE_ENV=production node dist-server/api/server.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "server:dev": "nodemon",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
-    "postinstall": "npm run build"
+    "postinstall": "npm run build:production"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.0",

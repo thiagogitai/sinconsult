@@ -1,9 +1,8 @@
-// Configuração PM2 para produção
+// Configuração PM2 para produção na Hostinger
 module.exports = {
   apps: [{
     name: 'simconsult',
-    script: 'api/server.ts',
-    interpreter: 'tsx',
+    script: 'dist-server/api/server.js',
     instances: 1,
     exec_mode: 'fork',
     env: {
@@ -20,4 +19,3 @@ module.exports = {
     node_args: '--max-old-space-size=1024'
   }]
 };
-

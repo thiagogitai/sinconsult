@@ -2972,6 +2972,25 @@ app.get('/api/security/configs', authenticateToken, asyncHandler(async (req, res
   }
 }));
 
+// ===== ROTA CATCH-ALL PARA SPA (deve vir antes do errorHandler) =====
+// Servir index.html para todas as rotas que não são API ou arquivos estáticos
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../dist');
+  app.get('*', (req, res, next) => {
+    // Se não for uma rota de API e não for um arquivo estático, servir index.html
+    if (!req.path.startsWith('/api') && !req.path.includes('.')) {
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        next();
+      }
+    } else {
+      next();
+    }
+  });
+}
+
 // ===== MIDDLEWARE DE ERRO (deve ser o último) =====
 app.use(errorHandler);
 

@@ -1,33 +1,35 @@
 # Configuração Apache para Hostinger
+# Redireciona todas as requisições para o servidor Node.js
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   
-  # Redirecionar HTTP para HTTPS (recomendado)
-  RewriteCond %{HTTPS} off
-  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+  # Permitir acesso direto a arquivos estáticos
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
   
-  # Proxy para API (se necessário)
-  # Descomente se o Node.js não estiver configurado diretamente
+  # Proxy para API (se usar proxy reverso)
+  # Descomente se a Hostinger não suportar Node.js diretamente
   # RewriteCond %{REQUEST_URI} ^/api/(.*)$
   # RewriteRule ^api/(.*)$ http://localhost:3006/api/$1 [P,L]
   
-  # Servir arquivos estáticos do frontend
+  # Servir index.html para todas as outras rotas (SPA)
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteCond %{REQUEST_URI} !^/api
-  RewriteRule ^(.*)$ /index.html [L]
+  RewriteRule ^ index.html [L]
 </IfModule>
 
 # Configurações de segurança
 <IfModule mod_headers.c>
-  # Proteger contra clickjacking
-  Header always set X-Frame-Options "SAMEORIGIN"
-  
-  # Proteger contra XSS
-  Header always set X-XSS-Protection "1; mode=block"
-  
-  # Prevenir MIME sniffing
-  Header always set X-Content-Type-Options "nosniff"
+  # Headers de segurança
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# Compressão GZIP
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
 </IfModule>
 
 # Cache de arquivos estáticos
@@ -40,5 +42,5 @@
   ExpiresByType image/svg+xml "access plus 1 year"
   ExpiresByType text/css "access plus 1 month"
   ExpiresByType application/javascript "access plus 1 month"
+  ExpiresByType text/javascript "access plus 1 month"
 </IfModule>
-
