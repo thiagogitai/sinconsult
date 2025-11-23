@@ -1,5 +1,5 @@
-// Configuração PM2 para produção na Hostinger
-module.exports = {
+// Configuração PM2 para produção na Hostinger (ES Module)
+export default {
   apps: [{
     name: 'simconsult',
     script: 'dist-server/api/server.js',
