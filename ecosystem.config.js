@@ -2,7 +2,7 @@
 export default {
   apps: [{
     name: 'simconsult',
-    script: 'dist-server/api/server.js',
+    script: './dist-server/api/server.js',
     instances: 1,
     exec_mode: 'fork',
     env: {
