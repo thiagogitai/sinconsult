@@ -38,6 +38,35 @@ export default function WhatsAppInstances() {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<WhatsAppInstance | null>(null);
   const { toast } = useToast();
+  const [evolutionStatus, setEvolutionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+
+  // Verificar status da Evolution API
+  const checkEvolutionStatus = async () => {
+    try {
+      setEvolutionStatus('checking');
+      const response = await fetch('/api/whatsapp/test-connection');
+      const data = await response.json();
+      
+      if (data.success && data.connected) {
+        setEvolutionStatus('connected');
+      } else {
+        setEvolutionStatus('error');
+        toast({
+          title: 'Evolution API',
+          description: 'Evolution API não está acessível',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao verificar Evolution API:', error);
+      setEvolutionStatus('error');
+      toast({
+        title: 'Evolution API',
+        description: 'Erro ao conectar à Evolution API',
+        variant: 'destructive'
+      });
+    }
+  };
 
   // Buscar instâncias
   const fetchInstances = async () => {
@@ -78,8 +107,8 @@ export default function WhatsAppInstances() {
     } catch (error) {
       console.error('Erro ao buscar instâncias:', error);
       toast({
-        title: 'Erro',
-        description: 'Erro de conexão com o servidor',
+        title: 'Erro de Conexão',
+        description: 'Não foi possível conectar ao servidor. Verifique se o servidor está rodando.',
         variant: 'destructive'
       });
     } finally {
@@ -266,6 +295,7 @@ export default function WhatsAppInstances() {
 
   // Buscar instâncias ao montar componente
   useEffect(() => {
+    checkEvolutionStatus();
     fetchInstances();
   }, []);
 
@@ -330,6 +360,30 @@ export default function WhatsAppInstances() {
               </div>
             </div>
             <div className="flex items-center space-x-6">
+              <button
+                onClick={checkEvolutionStatus}
+                className="flex items-center space-x-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full transition-colors"
+                title="Verificar status da Evolution API"
+              >
+                {evolutionStatus === 'checking' && (
+                  <>
+                    <RefreshCw className="h-3 w-3 text-blue-400 animate-spin" />
+                    <span className="text-sm font-medium">Verificando...</span>
+                  </>
+                )}
+                {evolutionStatus === 'connected' && (
+                  <>
+                    <Wifi className="h-3 w-3 text-green-400" />
+                    <span className="text-sm font-medium">Evolution API OK</span>
+                  </>
+                )}
+                {evolutionStatus === 'error' && (
+                  <>
+                    <WifiOff className="h-3 w-3 text-red-400" />
+                    <span className="text-sm font-medium">Evolution API Offline</span>
+                  </>
+                )}
+              </button>
               <div className="flex items-center space-x-2 bg-white/10 px-4 py-2 rounded-full">
                 <div className="h-3 w-3 bg-green-400 rounded-full animate-pulse"></div>
                 <span className="text-sm font-medium">{instances.filter(i => i.status === 'connected').length} Conectados</span>
