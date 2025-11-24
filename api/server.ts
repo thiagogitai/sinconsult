@@ -2778,6 +2778,34 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
   }
 }));
 
+// Health check do Evolution API (requer autenticação)
+app.get('/api/whatsapp/health', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const isConnected = await evolutionAPI.checkConnection();
+    const baseURL = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
+    const apiKey = process.env.EVOLUTION_API_KEY;
+    
+    res.json({
+      isHealthy: isConnected,
+      message: isConnected 
+        ? 'Evolution API está funcionando' 
+        : 'Evolution API não está acessível',
+      details: {
+        baseURL,
+        apiKeyConfigured: !!apiKey && apiKey !== 'your-api-key',
+        connectionStatus: isConnected ? 'connected' : 'disconnected'
+      }
+    });
+  } catch (error: any) {
+    logger.error('Erro ao verificar Evolution API:', { error });
+    res.status(500).json({
+      isHealthy: false,
+      message: `Erro ao verificar Evolution API: ${error.message}`,
+      details: { error: error.message }
+    });
+  }
+}));
+
 // Criar instância (requer autenticação)
 app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWhatsAppInstance), asyncHandler(async (req, res) => {
   try {
