@@ -1,5 +1,8 @@
-import { evolutionAPI } from '../services/evolution';
-import { logger } from './logger';
+import EvolutionAPI from '../services/evolution.js';
+import { logger } from './logger.js';
+
+// Criar instância
+const evolutionAPI = new EvolutionAPI();
 
 /**
  * Verifica se a Evolution API está acessível e configurada corretamente
