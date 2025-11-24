@@ -3318,15 +3318,29 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
           logger.info(`Verificando status da instância ${instanceName} na Evolution API...`);
           
           const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instanceName);
+          
+          // Evolution API pode retornar state ou status
           const state = evolutionStatus.state || evolutionStatus.status || '';
           const stateStr = String(state).toLowerCase();
           
-          logger.info(`Status retornado pela Evolution API para ${instanceName}:`, { state, stateStr, fullResponse: evolutionStatus });
+          // Também verificar connectionState se existir
+          const connectionState = (evolutionStatus as any).connectionState || state;
+          const connectionStateStr = String(connectionState).toLowerCase();
+          
+          logger.info(`Status retornado pela Evolution API para ${instanceName}:`, { 
+            state, 
+            stateStr, 
+            connectionState,
+            connectionStateStr,
+            fullResponse: evolutionStatus 
+          });
           
           let mappedStatus = instance.status;
-          if (stateStr === 'open') {
+          // Verificar ambos state e connectionState
+          const finalState = connectionStateStr || stateStr;
+          if (finalState === 'open' || finalState === 'connected') {
             mappedStatus = 'connected';
-          } else if (stateStr === 'close' || stateStr === 'closed') {
+          } else if (finalState === 'close' || finalState === 'closed' || finalState === 'disconnected') {
             mappedStatus = 'disconnected';
           }
           

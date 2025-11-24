@@ -61,7 +61,17 @@ const Contacts: React.FC = () => {
       
       if (response.ok) {
         // A API retorna array diretamente, não dentro de data.data
-        setContacts(Array.isArray(data) ? data : (data.data || []));
+        const contactsList = Array.isArray(data) ? data : (data.data || []);
+        // Converter tags de string para array se necessário
+        const normalizedContacts = contactsList.map((contact: any) => ({
+          ...contact,
+          tags: contact.tags 
+            ? (Array.isArray(contact.tags) 
+                ? contact.tags 
+                : (contact.tags.split ? contact.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t) : []))
+            : []
+        }));
+        setContacts(normalizedContacts);
       } else {
         console.error('Erro ao carregar contatos:', data.message);
         toast({
@@ -377,7 +387,10 @@ const Contacts: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="space-y-1">
               <p className="text-sm font-medium text-gray-600">Com Tags</p>
-              <p className="text-2xl font-bold text-gray-900">{contacts.filter(c => c.tags && c.tags.length > 0).length}</p>
+              <p className="text-2xl font-bold text-gray-900">{contacts.filter(c => {
+                const tags = Array.isArray(c.tags) ? c.tags : (c.tags ? c.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t) : []);
+                return tags.length > 0;
+              }).length}</p>
               <p className="text-xs text-gray-500">Segmentados</p>
             </div>
             <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
