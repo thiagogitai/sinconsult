@@ -48,6 +48,11 @@ export const schemas = {
   }),
 
   createCampaign: z.object({
+    channel: z.enum(['whatsapp', 'sms', 'email']).optional(),
+    sms_config_id: z.number().optional(),
+    email_config_id: z.number().optional(),
+    email_subject: z.string().optional(),
+    email_template_id: z.number().optional(),
     body: z.object({
       name: z.string().min(1, 'Nome da campanha é obrigatório'),
       message_template: z.string().min(1, 'Mensagem é obrigatória'),

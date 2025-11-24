@@ -241,11 +241,23 @@ function createTables() {
         use_tts BOOLEAN DEFAULT 0,
         tts_config_id TEXT,
         tts_audio_file TEXT,
+        channel TEXT DEFAULT 'whatsapp',
+        sms_config_id INTEGER,
+        email_config_id INTEGER,
+        email_subject TEXT,
+        email_template_id INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`, (err) => {
         if (err) reject(err);
       });
+      
+      // Adicionar colunas se não existirem (migration)
+      db.run(`ALTER TABLE campaigns ADD COLUMN channel TEXT DEFAULT 'whatsapp'`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN sms_config_id INTEGER`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN email_config_id INTEGER`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN email_subject TEXT`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN email_template_id INTEGER`, () => {});
 
       // Tabela de mensagens
       db.run(`CREATE TABLE IF NOT EXISTS messages (
@@ -871,6 +883,27 @@ app.patch('/api/campaigns/:id/status', authenticateToken, asyncHandler(async (re
     res.json(updatedCampaign);
   } catch (error) {
     logger.error('Erro ao atualizar status da campanha:', { error });
+    throw error;
+  }
+}));
+
+// Deletar campanha (requer autenticação)
+app.delete('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Verificar se a campanha existe
+    const campaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+    
+    // Deletar campanha
+    await dbRun('DELETE FROM campaigns WHERE id = ?', [id]);
+    
+    res.json({ success: true, message: 'Campanha deletada com sucesso' });
+  } catch (error) {
+    logger.error('Erro ao deletar campanha:', { error });
     throw error;
   }
 }));
@@ -2305,22 +2338,32 @@ app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWh
     // Criar instância na Evolution API
     const evolutionInstance = await evolutionAPI.createInstance(instance_name, phone_number);
     
+    // A resposta do Evolution API pode ter diferentes formatos
+    const instanceId = evolutionInstance.instance?.instanceName || evolutionInstance.instanceName || instance_name;
+    const qrcode = evolutionInstance.qrcode?.base64 || evolutionInstance.qrcode || evolutionInstance.instance?.qrcode?.base64;
+    const status = evolutionInstance.instance?.status || evolutionInstance.status || 'created';
+    
     // Salvar no banco de dados local
     const result = await dbRun(`
-      INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status)
-      VALUES (?, ?, ?, ?)
-    `, [instance_name, evolutionInstance.instanceName, phone_number, 'created']);
+      INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, qrcode)
+      VALUES (?, ?, ?, ?, ?)
+    `, [instance_name, instanceId, phone_number || null, status, qrcode || null]);
     
     const newInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [result.lastID]);
     
     res.json({
       ...newInstance,
-      qrcode: evolutionInstance.qrcode,
-      qrcode_url: evolutionInstance.qrcode ? `data:image/png;base64,${evolutionInstance.qrcode}` : null
+      qrcode: qrcode,
+      qrcode_url: qrcode ? `data:image/png;base64,${qrcode}` : null
     });
-  } catch (error) {
-    logger.error('Erro ao criar instância WhatsApp:', { error });
-    throw error;
+  } catch (error: any) {
+    logger.error('Erro ao criar instância WhatsApp:', { error: error.message, stack: error.stack });
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao criar instância WhatsApp',
+      message: error.message || 'Erro desconhecido',
+      details: error.response?.data || error.message
+    });
   }
 }));
 
@@ -2400,6 +2443,36 @@ app.post('/api/whatsapp/instances/:id/disconnect', authenticateToken, asyncHandl
     res.json({ message: 'Instância desconectada com sucesso' });
   } catch (error) {
     logger.error('Erro ao desconectar instância:', { error });
+    throw error;
+  }
+}));
+
+// Deletar instância WhatsApp (requer autenticação)
+app.delete('/api/whatsapp/instances/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Buscar instância no banco
+    const instance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [id]);
+    if (!instance) {
+      return res.status(404).json({ error: 'Instância não encontrada' });
+    }
+    
+    // Deletar na Evolution API se tiver instance_id
+    if (instance.instance_id) {
+      try {
+        await evolutionAPI.deleteInstance(instance.instance_id);
+      } catch (error) {
+        logger.warn('Erro ao deletar instância na Evolution API (continuando):', { error });
+      }
+    }
+    
+    // Deletar do banco
+    await dbRun('DELETE FROM whatsapp_instances WHERE id = ?', [id]);
+    
+    res.json({ success: true, message: 'Instância deletada com sucesso' });
+  } catch (error) {
+    logger.error('Erro ao deletar instância:', { error });
     throw error;
   }
 }));
