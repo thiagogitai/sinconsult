@@ -1036,22 +1036,39 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       ...req.body
     };
     
-    // Usar message_template ou message
-    const finalMessage = message_template || message || '';
-    const finalScheduleTime = schedule_time || scheduled_at;
+    // Usar message_template ou message (remover espaços em branco)
+    const finalMessage = (message_template || message || '').trim();
+    const finalScheduleTime = schedule_time || scheduled_at || null;
+    
+    // Converter strings vazias para null nos campos opcionais
+    const finalTtsConfigId = tts_config_id && tts_config_id.toString().trim() ? tts_config_id : null;
+    const finalTtsAudioFile = tts_audio_file && tts_audio_file.toString().trim() ? tts_audio_file : null;
+    const finalSmsConfigId = sms_config_id && sms_config_id.toString().trim() ? sms_config_id : null;
+    const finalSmsTemplateId = sms_template_id && sms_template_id.toString().trim() ? sms_template_id : null;
+    const finalEmailConfigId = email_config_id && email_config_id.toString().trim() ? email_config_id : null;
+    const finalEmailSubject = email_subject && email_subject.toString().trim() ? email_subject : null;
+    const finalEmailTemplateId = email_template_id && email_template_id.toString().trim() ? email_template_id : null;
     
     // Validação manual
     if (!name || !name.trim()) {
+      logger.warn('Tentativa de criar campanha sem nome');
       return res.status(400).json({
         success: false,
-        error: 'Nome da campanha é obrigatório'
+        error: 'Nome da campanha é obrigatório',
+        received: { name, message_template, message }
       });
     }
     
     if (!finalMessage || !finalMessage.trim()) {
+      logger.warn('Tentativa de criar campanha sem mensagem', { 
+        message_template, 
+        message, 
+        finalMessage 
+      });
       return res.status(400).json({
         success: false,
-        error: 'Mensagem é obrigatória'
+        error: 'Mensagem é obrigatória',
+        received: { message_template, message, finalMessage }
       });
     }
     
@@ -1085,19 +1102,19 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      name, 
+      name.trim(), 
       finalMessage, 
       message_type || 'text', 
       finalScheduleTime, 
       use_tts || false, 
-      tts_config_id || null, 
-      tts_audio_file || null,
+      finalTtsConfigId, 
+      finalTtsAudioFile,
       channel || 'whatsapp',
-      sms_config_id || null,
-      sms_template_id || null,
-      email_config_id || null,
-      email_subject || null,
-      email_template_id || null,
+      finalSmsConfigId,
+      finalSmsTemplateId,
+      finalEmailConfigId,
+      finalEmailSubject,
+      finalEmailTemplateId,
       finalMediaUrl
     ]);
     
@@ -1112,10 +1129,30 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       `Campanha "${name}" foi criada com sucesso`
     );
     
+    logger.info('Campanha criada com sucesso:', { id: result.lastID, name });
     res.json(newCampaign);
-  } catch (error) {
-    logger.error('Erro ao criar campanha:', { error });
-    throw error;
+  } catch (error: any) {
+    logger.error('Erro ao criar campanha:', { 
+      error: error.message, 
+      stack: error.stack,
+      body: req.body 
+    });
+    
+    // Se for erro de validação do banco, retornar mensagem mais clara
+    if (error.message && error.message.includes('NOT NULL constraint')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos: algum campo obrigatório está faltando',
+        details: error.message
+      });
+    }
+    
+    // Retornar erro genérico
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao criar campanha',
+      message: error.message || 'Erro desconhecido'
+    });
   }
 }));
 
