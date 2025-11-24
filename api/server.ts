@@ -72,12 +72,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Servir arquivos estáticos do frontend em produção
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../dist');
-  if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    logger.info('Servindo arquivos estáticos de:', distPath);
-  }
+// Servir arquivos estáticos do frontend
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  logger.info('Servindo arquivos estáticos de:', distPath);
+} else {
+  logger.warn('Pasta dist/ não encontrada em:', distPath);
+  logger.warn('__dirname atual:', __dirname);
 }
 
 // Rate limiting global
@@ -2974,32 +2976,32 @@ app.get('/api/security/configs', authenticateToken, asyncHandler(async (req, res
 
 // ===== ROTA CATCH-ALL PARA SPA (deve vir antes do errorHandler) =====
 // Servir index.html para todas as rotas que não são API ou arquivos estáticos
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../dist');
-  app.get('*', (req, res, next) => {
-    // Se for rota de API, passar adiante
-    if (req.path.startsWith('/api')) {
-      return next();
+const distPathForSPA = path.join(__dirname, '../dist');
+app.get('*', (req, res, next) => {
+  // Se for rota de API, passar adiante
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  
+  // Se for arquivo estático (tem extensão), tentar servir
+  if (req.path.includes('.')) {
+    const filePath = path.join(distPathForSPA, req.path);
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(path.resolve(filePath));
     }
-    
-    // Se for arquivo estático (tem extensão), tentar servir
-    if (req.path.includes('.')) {
-      const filePath = path.join(distPath, req.path);
-      if (fs.existsSync(filePath)) {
-        return res.sendFile(filePath);
-      }
-      return next();
-    }
-    
-    // Para todas as outras rotas, servir index.html (SPA)
-    const indexPath = path.join(distPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      return res.sendFile(indexPath);
-    }
-    
-    next();
-  });
-}
+    return next();
+  }
+  
+  // Para todas as outras rotas, servir index.html (SPA)
+  const indexPath = path.join(distPathForSPA, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    logger.info('Servindo index.html para rota:', req.path);
+    return res.sendFile(path.resolve(indexPath));
+  }
+  
+  logger.warn('index.html não encontrado em:', indexPath);
+  next();
+});
 
 // ===== MIDDLEWARE DE ERRO (deve ser o último) =====
 app.use(errorHandler);
