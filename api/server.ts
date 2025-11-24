@@ -3609,6 +3609,49 @@ app.get('/api/whatsapp/instances/:id/status', authenticateToken, asyncHandler(as
   }
 }));
 
+// Criar instância diretamente (para testes - sem autenticação)
+app.post('/api/whatsapp/instances-direct', 
+  asyncHandler(async (req, res) => {
+    try {
+      console.log('=== CRIAR INSTÂNCIA DIRETA (SEM AUTENTICAÇÃO) ===');
+      console.log('Body recebido:', req.body);
+      
+      const { name, instance_id, phone_connected, status, qrcode } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({
+          success: false,
+          error: 'Nome da instância é obrigatório'
+        });
+      }
+      
+      // Criar diretamente no banco de dados
+      const result = await dbRun(`
+        INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, qrcode)
+        VALUES (?, ?, ?, ?, ?)
+      `, [name, instance_id || name, phone_connected || null, status || 'created', qrcode || null]);
+      
+      const newInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [result.lastID]);
+      
+      console.log('✅ Instância criada com sucesso:', newInstance);
+      
+      res.json({
+        success: true,
+        message: 'Instância criada com sucesso',
+        instance: newInstance
+      });
+      
+    } catch (error) {
+      console.error('Erro ao criar instância direta:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao criar instância',
+        message: error.message
+      });
+    }
+  })
+);
+
 // ===== ROTAS DE ENVIO DE MENSAGENS =====
 
 // Enviar mensagem individual (requer autenticação)
