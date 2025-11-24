@@ -141,9 +141,13 @@ const Campaigns: React.FC = () => {
   const fetchSegments = async () => {
     try {
       const response = await segmentsAPI.getAll();
-      setSegments(response.data || []);
-    } catch (error) {
+      // A API pode retornar data.segments ou diretamente o array
+      const segmentsData = response.data || response.data?.segments || response.data;
+      setSegments(Array.isArray(segmentsData) ? segmentsData : []);
+    } catch (error: any) {
       console.error('Erro ao carregar segmentos:', error);
+      // Em caso de erro, definir array vazio para não quebrar a UI
+      setSegments([]);
     }
   };
 

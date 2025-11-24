@@ -1025,7 +1025,7 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       ORDER BY created_at DESC
     `);
     
-    res.json(campaigns);
+    res.json({ campaigns: campaigns });
   } catch (error) {
     logger.error('Erro ao buscar campanhas:', { error });
     throw error;
@@ -1066,6 +1066,9 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
     const finalMessage = (message_template || message || '').trim();
     const finalScheduleTime = schedule_time || scheduled_at || null;
     
+    // Verificar se há media_url no body (pode ser URL de imagem já enviada)
+    const finalMediaUrl = media_url || bodyData.media_url || req.body.media_url || null;
+    
     // Converter strings vazias para null nos campos opcionais
     const finalTtsConfigId = tts_config_id && tts_config_id.toString().trim() ? tts_config_id : null;
     const finalTtsAudioFile = tts_audio_file && tts_audio_file.toString().trim() ? tts_audio_file : null;
@@ -1085,21 +1088,33 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       });
     }
     
+    // Mensagem só é obrigatória se não for imagem ou vídeo (que pode ter apenas media_url)
     if (!finalMessage || !finalMessage.trim()) {
-      logger.warn('Tentativa de criar campanha sem mensagem', { 
-        message_template, 
-        message, 
-        finalMessage 
-      });
-      return res.status(400).json({
-        success: false,
-        error: 'Mensagem é obrigatória',
-        received: { message_template, message, finalMessage }
-      });
+      if (message_type !== 'image' && message_type !== 'video') {
+        logger.warn('Tentativa de criar campanha sem mensagem', { 
+          message_template, 
+          message, 
+          finalMessage,
+          message_type
+        });
+        return res.status(400).json({
+          success: false,
+          error: 'Mensagem é obrigatória para campanhas de texto ou áudio',
+          received: { message_template, message, finalMessage, message_type }
+        });
+      } else if (!finalMediaUrl) {
+        // Para imagem/vídeo, precisa ter media_url ou mensagem (legenda)
+        logger.warn('Tentativa de criar campanha imagem/vídeo sem mídia nem mensagem', { 
+          message_type,
+          finalMediaUrl
+        });
+        return res.status(400).json({
+          success: false,
+          error: 'Campanha de imagem/vídeo precisa ter uma mídia enviada ou uma mensagem (legenda)',
+          received: { message_type, media_url: finalMediaUrl, message: finalMessage }
+        });
+      }
     }
-    
-    // Verificar se há media_url no body (pode ser URL de imagem já enviada)
-    const finalMediaUrl = media_url || bodyData.media_url || req.body.media_url || null;
     
     logger.info('Dados finais para inserção:', {
       name,
