@@ -428,8 +428,10 @@ const Campaigns: React.FC = () => {
                 sms_template_id: '',
                 email_config_id: '',
                 email_subject: '',
-                email_template_id: ''
+                email_template_id: '',
+                media_url: ''
               });
+              setMediaPreview(null);
               setShowModal(true);
             }}
             className="bg-gray-700 text-white hover:bg-gray-800 px-6 py-3 rounded-lg flex items-center space-x-2 transition-colors font-semibold shadow-lg"
