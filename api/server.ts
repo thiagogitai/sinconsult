@@ -2977,17 +2977,27 @@ app.get('/api/security/configs', authenticateToken, asyncHandler(async (req, res
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, '../dist');
   app.get('*', (req, res, next) => {
-    // Se não for uma rota de API e não for um arquivo estático, servir index.html
-    if (!req.path.startsWith('/api') && !req.path.includes('.')) {
-      const indexPath = path.join(distPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        next();
-      }
-    } else {
-      next();
+    // Se for rota de API, passar adiante
+    if (req.path.startsWith('/api')) {
+      return next();
     }
+    
+    // Se for arquivo estático (tem extensão), tentar servir
+    if (req.path.includes('.')) {
+      const filePath = path.join(distPath, req.path);
+      if (fs.existsSync(filePath)) {
+        return res.sendFile(filePath);
+      }
+      return next();
+    }
+    
+    // Para todas as outras rotas, servir index.html (SPA)
+    const indexPath = path.join(distPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
+    
+    next();
   });
 }
 
