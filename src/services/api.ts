@@ -96,7 +96,7 @@ export const campaignsAPI = {
   delete: (id: string) =>
     api.delete(`/campaigns/${id}`).then(res => res.data),
   start: (id: string) =>
-    api.post(`/campaigns/${id}/start`),
+    api.post(`/campaigns/${id}/start`).then(res => res.data),
   pause: (id: string) =>
     api.post(`/campaigns/${id}/pause`).then(res => res.data),
   stop: (id: string) =>

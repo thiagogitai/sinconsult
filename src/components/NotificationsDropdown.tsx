@@ -27,6 +27,13 @@ const NotificationsDropdown: React.FC = () => {
   const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('Token não encontrado, usuário não autenticado');
+        setNotifications([]);
+        setUnreadCount(0);
+        return;
+      }
+
       const apiBase = import.meta.env.VITE_API_URL || '/api';
       const response = await fetch(`${apiBase}/notifications`, {
         headers: {
@@ -38,6 +45,15 @@ const NotificationsDropdown: React.FC = () => {
         const data = await response.json();
         setNotifications(data.notifications || []);
         setUnreadCount(data.unread_count || 0);
+      } else if (response.status === 401) {
+        console.warn('Token inválido ou expirado ao buscar notificações');
+        // Não redirecionar automaticamente para não interromper a experiência do usuário
+        setNotifications([]);
+        setUnreadCount(0);
+      } else {
+        console.error('Erro ao buscar notificações:', response.status);
+        setNotifications([]);
+        setUnreadCount(0);
       }
     } catch (error) {
       console.error('Erro ao buscar notificações:', error);
@@ -89,6 +105,55 @@ const NotificationsDropdown: React.FC = () => {
       console.error('Erro ao marcar todas como lidas:', error);
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
+    }
+  };
+
+  const createTestNotification = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para criar notificações de teste',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/notifications/test`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Sucesso',
+          description: 'Notificações de teste criadas com sucesso'
+        });
+        // Recarregar notificações
+        fetchNotifications();
+      } else if (response.status === 401) {
+        toast({
+          title: 'Erro de autenticação',
+          description: 'Token inválido ou expirado',
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: 'Erro',
+          description: 'Erro ao criar notificações de teste',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao criar notificações de teste:', error);
+      toast({
+        title: 'Erro',
+        description: 'Erro ao conectar ao servidor',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -263,6 +328,16 @@ const NotificationsDropdown: React.FC = () => {
                 </button>
               </div>
             )}
+            
+            {/* Botão de teste */}
+            <div className="px-4 py-2 border-t border-gray-200">
+              <button
+                onClick={createTestNotification}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium w-full text-center"
+              >
+                Criar notificação de teste
+              </button>
+            </div>
           </div>
         </>
       )}

@@ -174,6 +174,20 @@ async function initializeSQLite() {
       });
     };
 
+// Função auxiliar para criar notificações
+async function createNotification(userId: number | null, type: string, title: string, message: string): Promise<void> {
+  try {
+    await dbRun(`
+      INSERT INTO notifications (user_id, type, title, message, read, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `, [userId, type, title, message, false]);
+    
+    console.log(`✅ Notificação criada: ${title} - ${message}`);
+  } catch (error) {
+    console.error('Erro ao criar notificação:', error);
+  }
+}
+
     dbRun = (query: string, params: any[] = []): Promise<{ lastID: number; changes: number }> => {
       return new Promise((resolve, reject) => {
         db.run(query, params, function(err) {
@@ -968,6 +982,16 @@ app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), 
     ]);
     
     const newCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
+    
+    // Criar notificação de campanha criada
+    const userId = (req as any).user?.userId;
+    await createNotification(
+      userId,
+      'success',
+      'Campanha criada',
+      `Campanha "${name}" foi criada com sucesso`
+    );
+    
     res.json(newCampaign);
   } catch (error) {
     logger.error('Erro ao criar campanha:', { error });
@@ -995,6 +1019,35 @@ app.patch('/api/campaigns/:id/status', authenticateToken, asyncHandler(async (re
   }
 }));
 
+// Iniciar campanha (requer autenticação)
+app.post('/api/campaigns/:id/start', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    await dbRun(`
+      UPDATE campaigns 
+      SET status = 'active', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [id]);
+    
+    const updatedCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    
+    // Criar notificação de campanha iniciada
+    const userId = (req as any).user?.userId;
+    await createNotification(
+      userId,
+      'success',
+      'Campanha iniciada',
+      `Campanha "${updatedCampaign.name}" foi iniciada com sucesso`
+    );
+    
+    res.json({ success: true, data: updatedCampaign });
+  } catch (error) {
+    logger.error('Erro ao iniciar campanha:', { error });
+    throw error;
+  }
+}));
+
 // Pausar campanha (requer autenticação)
 app.post('/api/campaigns/:id/pause', authenticateToken, asyncHandler(async (req, res) => {
   try {
@@ -1007,6 +1060,16 @@ app.post('/api/campaigns/:id/pause', authenticateToken, asyncHandler(async (req,
     `, [id]);
     
     const updatedCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    
+    // Criar notificação de campanha pausada
+    const userId = (req as any).user?.userId;
+    await createNotification(
+      userId,
+      'warning',
+      'Campanha pausada',
+      `Campanha "${updatedCampaign.name}" foi pausada`
+    );
+    
     res.json({ success: true, data: updatedCampaign });
   } catch (error) {
     logger.error('Erro ao pausar campanha:', { error });
@@ -2660,6 +2723,80 @@ app.get('/api/tts/voices/:provider', authenticateToken, asyncHandler(async (req,
 // ===== ROTAS DE NOTIFICAÇÕES =====
 // (Tabela de notificações criada em createTables())
 
+// Limpar notificações antigas (requer autenticação)
+app.delete('/api/notifications/cleanup', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const days = parseInt(req.query.days as string) || 30;
+    
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    
+    await dbRun(`
+      DELETE FROM notifications 
+      WHERE (user_id = ? OR user_id IS NULL) 
+      AND created_at < ?
+    `, [userId, cutoffDate.toISOString()]);
+    
+    res.json({
+      success: true,
+      message: `Notificações antigas removidas (mais de ${days} dias)`
+    });
+  } catch (error) {
+    console.error('Erro ao limpar notificações:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao limpar notificações'
+    });
+  }
+}));
+
+// Rota de teste para notificações (requer autenticação)
+app.get('/api/notifications/test', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const userId = (req as any).user?.userId;
+    
+    // Criar notificações de teste
+    const testNotifications = [
+      {
+        user_id: userId,
+        type: 'info',
+        title: 'Sistema iniciado',
+        message: 'O sistema foi iniciado com sucesso',
+        read: false,
+        created_at: new Date().toISOString()
+      },
+      {
+        user_id: userId,
+        type: 'success',
+        title: 'Teste de notificação',
+        message: 'Esta é uma notificação de teste',
+        read: false,
+        created_at: new Date(Date.now() - 60000).toISOString()
+      }
+    ];
+
+    // Inserir notificações de teste
+    for (const notification of testNotifications) {
+      await dbRun(`
+        INSERT INTO notifications (user_id, type, title, message, read, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [notification.user_id, notification.type, notification.title, notification.message, notification.read, notification.created_at]);
+    }
+
+    res.json({
+      success: true,
+      message: 'Notificações de teste criadas com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao criar notificações de teste:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao criar notificações de teste'
+    });
+  }
+}));
+
 // Listar notificações (requer autenticação)
 app.get('/api/notifications', authenticateToken, asyncHandler(async (req, res) => {
   try {
@@ -3317,6 +3454,15 @@ app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(
       SET status = ?, qrcode = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, ['connecting', base64Content, id]);
+    
+    // Criar notificação de conexão iniciada
+    const userId = (req as any).user?.userId;
+    await createNotification(
+      userId,
+      'info',
+      'WhatsApp conectando',
+      `Instância "${instance.name}" está conectando... Escaneie o QR Code`
+    );
     
     res.json({
       qrcode: base64Content,
