@@ -3354,11 +3354,37 @@ app.post('/api/whatsapp/instances-debug', authenticateToken, asyncHandler(async 
   }
 }));
 
-// Criar instância (requer autenticação)
-app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWhatsAppInstance), asyncHandler(async (req, res) => {
+// Criar instância (requer autenticação) - com debug aprimorado
+app.post('/api/whatsapp/instances', 
+  authenticateToken, 
+  (req, res, next) => {
+    console.log('=== VALIDAÇÃO DEBUG ===');
+    console.log('Headers:', req.headers);
+    console.log('Body antes da validação:', req.body);
+    next();
+  },
+  validate(schemas.createWhatsAppInstance), 
+  (err, req, res, next) => {
+    // Handler específico para erros de validação
+    if (err.statusCode === 400 && err.code === 'VALIDATION_ERROR') {
+      console.log('=== ERRO DE VALIDAÇÃO DETECTADO ===');
+      console.log('Erro:', err.message);
+      console.log('Body que causou erro:', req.body);
+      return res.status(400).json({
+        success: false,
+        error: 'Erro de validação',
+        details: err.message,
+        receivedBody: req.body
+      });
+    }
+    next(err);
+  },
+  asyncHandler(async (req, res) => {
   try {
     console.log('=== DEBUG CRIAR INSTÂNCIA ORIGINAL ===');
+    console.log('Headers:', req.headers);
     console.log('Body recebido:', req.body);
+    console.log('User:', req.user);
     
     const { name, instance_name, phone_number, phone } = req.body;
     const instanceName = name || instance_name;

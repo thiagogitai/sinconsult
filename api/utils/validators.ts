@@ -69,13 +69,8 @@ export const schemas = {
 
   createWhatsAppInstance: z.object({
     body: z.object({
-      name: z.string().min(1, 'Nome da instância é obrigatório').optional(),
-      instance_name: z.string().min(1, 'Nome da instância é obrigatório').optional(),
-      phone_number: z.string().optional(),
-      phone: z.string().optional()
-    }).refine((data) => data.name || data.instance_name, {
-      message: 'Nome da instância é obrigatório',
-      path: ['name']
+      name: z.string().min(1, 'Nome da instância é obrigatório'),
+      phone_number: z.string().optional().nullable()
     })
   }),
 

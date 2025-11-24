@@ -1,0 +1,4 @@
+# COMANDO ÚNICO PARA RESOLVER DEPLOY NO VPS
+# Execute este comando completo no VPS:
+
+cd ~/simconsult && rm -f test_instance.json database.sqlite api/database.sqlite && git stash && git pull origin main && npm install && npm run build:server && npm run build:frontend && pm2 restart simconsult && sleep 3 && pm2 status && pm2 logs simconsult --lines 10
