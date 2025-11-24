@@ -12,12 +12,12 @@ import SMS from "@/pages/SMS";
 import Email from "@/pages/Email";
 import Login from "@/pages/Login";
 import ToastContainer from "@/components/ToastContainer";
-import { useToast } from "@/hooks/use-toast";
+import { ToastProvider, useToastContext } from "@/contexts/ToastContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect } from "react";
 
-function App() {
-  const { toasts, dismiss } = useToast();
+function AppContent() {
+  const { toasts, dismiss } = useToastContext();
   const { isAuthenticated, loading, checkAuth } = useAuth();
 
   // Verificar autenticação ao carregar
@@ -40,36 +40,46 @@ function App() {
   }
 
   return (
-    <Router>
-      <Routes>
-        <Route 
-          path="/login" 
-          element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} 
-        />
-        <Route path="/*" element={
-          isAuthenticated ? (
-            <LayoutWithImages>
-              <Routes>
-                <Route path="/" element={<DashboardPremium />} />
-                <Route path="/campaigns" element={<Campaigns />} />
-                <Route path="/contacts" element={<Contacts />} />
-                <Route path="/import" element={<Import />} />
-                <Route path="/schedules" element={<Schedules />} />
-                <Route path="/tts" element={<TTS />} />
-                <Route path="/whatsapp" element={<WhatsAppInstances />} />
-                <Route path="/sms" element={<SMS />} />
-                <Route path="/email" element={<Email />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-              <ToastContainer toasts={toasts} onDismiss={dismiss} />
-            </LayoutWithImages>
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        } />
-      </Routes>
-    </Router>
+    <>
+      <Router>
+        <Routes>
+          <Route 
+            path="/login" 
+            element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} 
+          />
+          <Route path="/*" element={
+            isAuthenticated ? (
+              <LayoutWithImages>
+                <Routes>
+                  <Route path="/" element={<DashboardPremium />} />
+                  <Route path="/campaigns" element={<Campaigns />} />
+                  <Route path="/contacts" element={<Contacts />} />
+                  <Route path="/import" element={<Import />} />
+                  <Route path="/schedules" element={<Schedules />} />
+                  <Route path="/tts" element={<TTS />} />
+                  <Route path="/whatsapp" element={<WhatsAppInstances />} />
+                  <Route path="/sms" element={<SMS />} />
+                  <Route path="/email" element={<Email />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </LayoutWithImages>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          } />
+        </Routes>
+      </Router>
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
+    </>
+  );
+}
+
+function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }
 
