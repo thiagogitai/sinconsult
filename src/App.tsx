@@ -8,6 +8,8 @@ import Schedules from "@/pages/Schedules";
 import TTS from "@/pages/TTS";
 import WhatsAppInstances from "@/pages/WhatsAppInstances";
 import Settings from "@/pages/Settings";
+import SMS from "@/pages/SMS";
+import Email from "@/pages/Email";
 import Login from "@/pages/Login";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/use-toast";

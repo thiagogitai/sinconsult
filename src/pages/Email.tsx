@@ -17,7 +17,7 @@ import {
 import { useToast } from '../hooks/use-toast';
 
 const Email: React.FC = () => {
-  const { addToast } = useToast();
+  const { toast } = useToast();
   const [emailAddress, setEmailAddress] = useState('');
   const [subject, setSubject] = useState('');
   const [htmlContent, setHtmlContent] = useState('');
@@ -103,10 +103,10 @@ const Email: React.FC = () => {
         if (data.text_content) {
           setTextContent(data.text_content);
         }
-        addToast('Template carregado com sucesso!', 'success');
+        toast({ title: 'Sucesso', description: 'Template carregado com sucesso!' });
       }
     } catch (error) {
-      addToast('Erro ao carregar template', 'error');
+      toast({ title: 'Erro', description: 'Erro ao carregar template', variant: 'destructive' });
     }
   };
 
@@ -145,7 +145,7 @@ const Email: React.FC = () => {
 
   const handleSaveTemplate = async () => {
     if (!subject || (!htmlContent && !textContent)) {
-      addToast('Preencha o assunto e o conteúdo', 'error');
+      toast({ title: 'Erro', description: 'Preencha o assunto e o conteúdo', variant: 'destructive' });
       return;
     }
 
@@ -169,19 +169,19 @@ const Email: React.FC = () => {
       });
 
       if (response.ok) {
-        addToast('Template salvo com sucesso!', 'success');
+        toast({ title: 'Sucesso', description: 'Template salvo com sucesso!' });
         fetchTemplates();
       } else {
-        addToast('Erro ao salvar template', 'error');
+        toast({ title: 'Erro', description: 'Erro ao salvar template', variant: 'destructive' });
       }
     } catch (error) {
-      addToast('Erro ao salvar template', 'error');
+      toast({ title: 'Erro', description: 'Erro ao salvar template', variant: 'destructive' });
     }
   };
 
   const handleSend = async () => {
     if (!emailAddress || !subject || (!htmlContent && !textContent)) {
-      addToast('Preencha todos os campos obrigatórios', 'error');
+      toast({ title: 'Erro', description: 'Preencha todos os campos obrigatórios', variant: 'destructive' });
       return;
     }
 
@@ -205,17 +205,17 @@ const Email: React.FC = () => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        addToast('Email enviado com sucesso!', 'success');
+        toast({ title: 'Sucesso', description: 'Email enviado com sucesso!' });
         setEmailAddress('');
         setSubject('');
         setHtmlContent('');
         setTextContent('');
         setVariables({});
       } else {
-        addToast(data.error || 'Erro ao enviar email', 'error');
+        toast({ title: 'Erro', description: data.error || 'Erro ao enviar email', variant: 'destructive' });
       }
     } catch (error) {
-      addToast('Erro ao enviar email', 'error');
+      toast({ title: 'Erro', description: 'Erro ao enviar email', variant: 'destructive' });
     } finally {
       setLoading(false);
     }

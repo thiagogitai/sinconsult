@@ -12,7 +12,7 @@ import {
 import { useToast } from '../hooks/use-toast';
 
 const SMS: React.FC = () => {
-  const { addToast } = useToast();
+  const { toast } = useToast();
   const [message, setMessage] = useState('');
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState('');
@@ -83,7 +83,7 @@ const SMS: React.FC = () => {
 
   const handleSend = async () => {
     if (!phoneNumber || !message) {
-      addToast('Preencha o número e a mensagem', 'error');
+      toast({ title: 'Erro', description: 'Preencha o número e a mensagem', variant: 'destructive' });
       return;
     }
 
@@ -105,15 +105,15 @@ const SMS: React.FC = () => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        addToast('SMS enviado com sucesso!', 'success');
+        toast({ title: 'Sucesso', description: 'SMS enviado com sucesso!' });
         setMessage('');
         setPhoneNumber('');
         setVariables({});
       } else {
-        addToast(data.error || 'Erro ao enviar SMS', 'error');
+        toast({ title: 'Erro', description: data.error || 'Erro ao enviar SMS', variant: 'destructive' });
       }
     } catch (error) {
-      addToast('Erro ao enviar SMS', 'error');
+      toast({ title: 'Erro', description: 'Erro ao enviar SMS', variant: 'destructive' });
     } finally {
       setLoading(false);
     }

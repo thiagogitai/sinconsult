@@ -40,6 +40,14 @@
   "exclude": [
     "node_modules",
     "dist",
-    "api/services/evolution-mock.ts"
+    "api/services/evolution-mock.ts",
+    "api/server-main.ts",
+    "api/server-new.ts",
+    "api/server-simple.ts",
+    "api/server-test.ts",
+    "api/server-mock.ts",
+    "api/routes/auth.ts",
+    "api/app.ts",
+    "api/index.ts"
   ]
 }

@@ -11,7 +11,7 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   
   const { login } = useAuth();
-  const { addToast } = useToast();
+  const { toast } = useToast();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -22,14 +22,14 @@ const Login: React.FC = () => {
       const result = await login(email, password);
       
       if (result.success) {
-        addToast('Login realizado com sucesso!', 'success');
+        toast({ title: 'Sucesso', description: 'Login realizado com sucesso!' });
         navigate('/');
       } else {
-        addToast(result.error || 'Erro ao fazer login', 'error');
+        toast({ title: 'Erro', description: result.error || 'Erro ao fazer login', variant: 'destructive' });
       }
     } catch (error) {
       console.error('Erro no login:', error);
-      addToast('Erro de conexão com o servidor', 'error');
+      toast({ title: 'Erro', description: 'Erro de conexão com o servidor', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
