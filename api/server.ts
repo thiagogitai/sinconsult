@@ -306,6 +306,32 @@ const uploadImage = multer({
   }
 });
 
+// Upload para vídeos (apenas vídeos)
+const uploadVideo = multer({ 
+  storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limite
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('video/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos de vídeo são permitidos'));
+    }
+  }
+});
+
+// Upload para mídia (imagens e vídeos)
+const uploadMedia = multer({ 
+  storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limite
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos de imagem ou vídeo são permitidos'));
+    }
+  }
+});
+
 // Funções auxiliares para SQLite (definidas globalmente)
 let dbAll: (query: string, params?: any[]) => Promise<any[]> = async () => [];
 let dbGet: (query: string, params?: any[]) => Promise<any> = async () => null;
@@ -1597,7 +1623,7 @@ app.get('/api/segments/:id/contacts', authenticateToken, asyncHandler(async (req
   }
 }));
 
-// ===== ROTAS DE UPLOAD DE IMAGENS =====
+// ===== ROTAS DE UPLOAD DE MÍDIA =====
 
 // Upload de imagem para campanhas (requer autenticação)
 app.post('/api/upload/image', authenticateToken, uploadImage.single('image'), asyncHandler(async (req, res) => {
@@ -1621,6 +1647,71 @@ app.post('/api/upload/image', authenticateToken, uploadImage.single('image'), as
     });
   } catch (error: any) {
     logger.error('Erro ao fazer upload de imagem:', { error });
+    if (error.message) {
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
+    throw error;
+  }
+}));
+
+// Upload de vídeo para campanhas (requer autenticação)
+app.post('/api/upload/video', authenticateToken, uploadVideo.single('video'), asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhum vídeo enviado'
+      });
+    }
+    
+    // Retornar URL do vídeo
+    const videoUrl = `/uploads/${req.file.filename}`;
+    
+    res.json({
+      success: true,
+      url: videoUrl,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+  } catch (error: any) {
+    logger.error('Erro ao fazer upload de vídeo:', { error });
+    if (error.message) {
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
+    throw error;
+  }
+}));
+
+// Upload de mídia genérica (imagem ou vídeo) para campanhas (requer autenticação)
+app.post('/api/upload/media', authenticateToken, uploadMedia.single('media'), asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhum arquivo enviado'
+      });
+    }
+    
+    // Retornar URL da mídia
+    const mediaUrl = `/uploads/${req.file.filename}`;
+    
+    res.json({
+      success: true,
+      url: mediaUrl,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      type: req.file.mimetype.startsWith('image/') ? 'image' : 'video'
+    });
+  } catch (error: any) {
+    logger.error('Erro ao fazer upload de mídia:', { error });
     if (error.message) {
       return res.status(400).json({
         success: false,

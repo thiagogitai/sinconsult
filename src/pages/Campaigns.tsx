@@ -38,8 +38,11 @@ const Campaigns: React.FC = () => {
     sms_template_id: '',
     email_config_id: '',
     email_subject: '',
-    email_template_id: ''
+    email_template_id: '',
+    media_url: '' // URL da imagem ou vídeo
   });
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [smsConfigs, setSmsConfigs] = useState<any[]>([]);
   const [smsTemplates, setSmsTemplates] = useState<any[]>([]);
   const [emailConfigs, setEmailConfigs] = useState<any[]>([]);
@@ -144,6 +147,39 @@ const Campaigns: React.FC = () => {
     }
   };
 
+  const handleMediaUpload = async (file: File) => {
+    try {
+      setUploadingMedia(true);
+      const formDataUpload = new FormData();
+      formDataUpload.append('media', file);
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/upload/media', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formDataUpload
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setFormData({ ...formData, media_url: data.url });
+        setMediaPreview(data.url);
+        return data.url;
+      } else {
+        throw new Error(data.error || 'Erro ao fazer upload');
+      }
+    } catch (error: any) {
+      console.error('Erro ao fazer upload:', error);
+      alert('Erro ao fazer upload: ' + (error.message || 'Erro desconhecido'));
+      throw error;
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
   const handleCreateCampaign = async () => {
     try {
       const campaignData = {
@@ -160,7 +196,8 @@ const Campaigns: React.FC = () => {
         sms_template_id: formData.channel === 'sms' ? formData.sms_template_id : null,
         email_config_id: formData.channel === 'email' ? formData.email_config_id : null,
         email_subject: formData.channel === 'email' ? formData.email_subject : null,
-        email_template_id: formData.channel === 'email' ? formData.email_template_id : null
+        email_template_id: formData.channel === 'email' ? formData.email_template_id : null,
+        media_url: formData.media_url || null
       };
 
       await campaignsAPI.create(campaignData);
@@ -179,8 +216,10 @@ const Campaigns: React.FC = () => {
         sms_template_id: '',
         email_config_id: '',
         email_subject: '',
-        email_template_id: ''
+        email_template_id: '',
+        media_url: ''
       });
+      setMediaPreview(null);
       fetchCampaigns();
     } catch (error) {
       console.error('Erro ao criar campanha:', error);
@@ -190,6 +229,7 @@ const Campaigns: React.FC = () => {
 
   const handleEditCampaign = (campaign: any) => {
     setEditingCampaign(campaign);
+    const mediaUrl = campaign.media_url || '';
     setFormData({
       name: campaign.name,
       message: campaign.message || campaign.message_template || '',
@@ -204,8 +244,10 @@ const Campaigns: React.FC = () => {
       sms_template_id: campaign.sms_template_id || '',
       email_config_id: campaign.email_config_id || '',
       email_subject: campaign.email_subject || '',
-      email_template_id: campaign.email_template_id || ''
+      email_template_id: campaign.email_template_id || '',
+      media_url: campaign.media_url || ''
     });
+    setMediaPreview(campaign.media_url || null);
     setShowModal(true);
   };
 
@@ -599,7 +641,10 @@ const Campaigns: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo de Mensagem</label>
                   <select
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, type: e.target.value, media_url: '' });
+                      setMediaPreview(null);
+                    }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
                     disabled={formData.channel !== 'whatsapp'}
                   >
@@ -747,14 +792,121 @@ const Campaigns: React.FC = () => {
                 </div>
               )}
               
+              {/* Upload de Imagem */}
+              {formData.type === 'image' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Upload de Imagem</label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleMediaUpload(file);
+                        }
+                      }}
+                      className="hidden"
+                      id="image-upload"
+                      disabled={uploadingMedia}
+                    />
+                    <label
+                      htmlFor="image-upload"
+                      className="cursor-pointer flex flex-col items-center"
+                    >
+                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-600">
+                        {uploadingMedia ? 'Enviando...' : 'Clique para selecionar uma imagem'}
+                      </span>
+                      <span className="text-xs text-gray-500 mt-1">PNG, JPG, GIF até 10MB</span>
+                    </label>
+                  </div>
+                  {mediaPreview && (
+                    <div className="mt-4">
+                      <img
+                        src={mediaPreview}
+                        alt="Preview"
+                        className="max-w-full h-48 object-contain rounded-lg border border-gray-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({ ...formData, media_url: '' });
+                          setMediaPreview(null);
+                        }}
+                        className="mt-2 text-sm text-red-600 hover:text-red-800"
+                      >
+                        Remover imagem
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Upload de Vídeo */}
+              {formData.type === 'video' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Upload de Vídeo</label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleMediaUpload(file);
+                        }
+                      }}
+                      className="hidden"
+                      id="video-upload"
+                      disabled={uploadingMedia}
+                    />
+                    <label
+                      htmlFor="video-upload"
+                      className="cursor-pointer flex flex-col items-center"
+                    >
+                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-600">
+                        {uploadingMedia ? 'Enviando...' : 'Clique para selecionar um vídeo'}
+                      </span>
+                      <span className="text-xs text-gray-500 mt-1">MP4, AVI, MOV até 50MB</span>
+                    </label>
+                  </div>
+                  {mediaPreview && (
+                    <div className="mt-4">
+                      <video
+                        src={mediaPreview}
+                        controls
+                        className="max-w-full h-48 rounded-lg border border-gray-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({ ...formData, media_url: '' });
+                          setMediaPreview(null);
+                        }}
+                        className="mt-2 text-sm text-red-600 hover:text-red-800"
+                      >
+                        Remover vídeo
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Mensagem</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Mensagem {formData.type === 'text' ? '' : '(Opcional)'}
+                </label>
                 <textarea
                   value={formData.message}
                   onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                   rows={5}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-                  placeholder="Digite sua mensagem aqui... Use {nome} para personalizar com o nome do contato."
+                  placeholder={formData.type === 'text' 
+                    ? "Digite sua mensagem aqui... Use {nome} para personalizar com o nome do contato."
+                    : "Digite uma legenda para a imagem/vídeo (opcional)..."
+                  }
                 />
                 <p className="text-xs text-gray-500 mt-2">Caracteres: {formData.message.length}</p>
               </div>
