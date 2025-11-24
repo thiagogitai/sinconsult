@@ -3306,9 +3306,13 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
         last_connection as last_activity,
         created_at
       FROM whatsapp_instances
-      WHERE is_active = 1
+      WHERE (is_active = 1 OR is_active IS NULL)
       ORDER BY created_at DESC
     `);
+    
+    logger.info(`Total de instâncias encontradas: ${instances.length}`, { 
+      instances: instances.map((i: any) => ({ id: i.id, name: i.instance_name, status: i.status, is_active: i.is_active }))
+    });
     
     // Verificar status na Evolution API para instâncias que estão "connecting" ou "created"
     for (const instance of instances) {
