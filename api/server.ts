@@ -3305,7 +3305,7 @@ class MessageQueue {
         WHERE id = ?
       `, ['sent', new Date().toISOString(), messageResult.lastID]);
       
-      console.log(`✅ Mensagem enviada para ${contact.phone}`);
+      logger.info(`✅ Mensagem enviada para ${contact.phone}`);
       
     } catch (sendError) {
       // Atualizar status da mensagem com erro
