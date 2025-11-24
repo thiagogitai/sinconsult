@@ -2378,9 +2378,9 @@ app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWh
     const evolutionInstance = await evolutionAPI.createInstance(instance_name, phone_number);
     
     // A resposta do Evolution API pode ter diferentes formatos
-    const instanceId = evolutionInstance.instance?.instanceName || evolutionInstance.instanceName || instance_name;
-    const qrcode = evolutionInstance.qrcode?.base64 || evolutionInstance.qrcode || evolutionInstance.instance?.qrcode?.base64;
-    const status = evolutionInstance.instance?.status || evolutionInstance.status || 'created';
+    const instanceId = evolutionInstance.instanceId || evolutionInstance.instanceName || instance_name;
+    const qrcode = evolutionInstance.qrcode || evolutionInstance.qrcodeBase64 || null;
+    const status = evolutionInstance.status || 'created';
     
     // Salvar no banco de dados local
     const result = await dbRun(`
