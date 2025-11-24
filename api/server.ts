@@ -1009,13 +1009,18 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
 // Criar campanha (requer autenticação)
 app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
   try {
+    logger.info('=== DEBUG CRIAR CAMPANHA ===');
+    logger.info('Body recebido:', JSON.stringify(req.body, null, 2));
+    
     // A validação pode estar esperando body aninhado, vamos aceitar ambos os formatos
     const bodyData = req.body.body || req.body;
     const { 
       name, 
       message_template, 
+      message,  // Aceitar também 'message' como alternativa
       message_type, 
       schedule_time, 
+      scheduled_at,  // Aceitar também 'scheduled_at'
       use_tts, 
       tts_config_id, 
       tts_audio_file,
@@ -1024,11 +1029,16 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       sms_template_id,
       email_config_id,
       email_subject,
-      email_template_id
+      email_template_id,
+      media_url
     } = {
       ...bodyData,
       ...req.body
     };
+    
+    // Usar message_template ou message
+    const finalMessage = message_template || message || '';
+    const finalScheduleTime = schedule_time || scheduled_at;
     
     // Validação manual
     if (!name || !name.trim()) {
@@ -1038,7 +1048,7 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       });
     }
     
-    if (!message_template || !message_template.trim()) {
+    if (!finalMessage || !finalMessage.trim()) {
       return res.status(400).json({
         success: false,
         error: 'Mensagem é obrigatória'
@@ -1046,7 +1056,15 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
     }
     
     // Verificar se há media_url no body (pode ser URL de imagem já enviada)
-    const media_url = bodyData.media_url || req.body.media_url || null;
+    const finalMediaUrl = media_url || bodyData.media_url || req.body.media_url || null;
+    
+    logger.info('Dados finais para inserção:', {
+      name,
+      message: finalMessage,
+      message_type: message_type || 'text',
+      scheduled_at: finalScheduleTime,
+      media_url: finalMediaUrl
+    });
     
     const result = await dbRun(`
       INSERT INTO campaigns (
@@ -1068,9 +1086,9 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       name, 
-      message_template, 
+      finalMessage, 
       message_type || 'text', 
-      schedule_time, 
+      finalScheduleTime, 
       use_tts || false, 
       tts_config_id || null, 
       tts_audio_file || null,
@@ -1080,7 +1098,7 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       email_config_id || null,
       email_subject || null,
       email_template_id || null,
-      media_url
+      finalMediaUrl
     ]);
     
     const newCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
@@ -1464,6 +1482,7 @@ app.post('/api/contacts', authenticateToken, validate(schemas.createContact), as
 // Listar segmentos (requer autenticação)
 app.get('/api/segments', authenticateToken, asyncHandler(async (req, res) => {
   try {
+    logger.info('GET /api/segments - Buscando segmentos');
     // Buscar segmentos únicos dos contatos
     const segments = await dbAll(`
       SELECT DISTINCT 
@@ -1476,10 +1495,15 @@ app.get('/api/segments', authenticateToken, asyncHandler(async (req, res) => {
       ORDER BY contact_count DESC, segment ASC
     `);
     
+    logger.info(`GET /api/segments - Retornando ${segments.length} segmentos`);
     res.json(segments);
-  } catch (error) {
-    logger.error('Erro ao buscar segmentos:', { error });
-    throw error;
+  } catch (error: any) {
+    logger.error('Erro ao buscar segmentos:', { error: error.message, stack: error.stack });
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao buscar segmentos',
+      message: error.message
+    });
   }
 }));
 
@@ -2842,6 +2866,7 @@ app.get('/api/tts/metrics', authenticateToken, asyncHandler(async (req, res) => 
 // Arquivos TTS salvos (requer autenticação)
 app.get('/api/tts/files', authenticateToken, asyncHandler(async (req, res) => {
   try {
+    logger.info('GET /api/tts/files - Buscando arquivos TTS');
     // Verificar se a tabela existe, se não existir retornar array vazio
     let files: any[] = [];
     try {
@@ -2872,10 +2897,16 @@ app.get('/api/tts/files', authenticateToken, asyncHandler(async (req, res) => {
       }
     }
     
+    logger.info(`GET /api/tts/files - Retornando ${files.length} arquivos`);
     res.json({ files: files });
-  } catch (error) {
-    logger.error('Erro ao buscar arquivos TTS:', { error });
-    throw error;
+  } catch (error: any) {
+    logger.error('Erro ao buscar arquivos TTS:', { error: error.message, stack: error.stack });
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao buscar arquivos TTS',
+      message: error.message,
+      files: []
+    });
   }
 }));
 
