@@ -60,7 +60,8 @@ const Contacts: React.FC = () => {
       const data = await response.json();
       
       if (response.ok) {
-        setContacts(data.data || []);
+        // A API retorna array diretamente, não dentro de data.data
+        setContacts(Array.isArray(data) ? data : (data.data || []));
       } else {
         console.error('Erro ao carregar contatos:', data.message);
         toast({

@@ -1396,8 +1396,8 @@ app.post('/api/contacts', authenticateToken, validate(schemas.createContact), as
     }
     
     const result = await dbRun(`
-      INSERT INTO contacts (name, phone, email, segment, is_blocked)
-      VALUES (?, ?, ?, ?, 0)
+      INSERT INTO contacts (name, phone, email, segment, is_active, is_blocked)
+      VALUES (?, ?, ?, ?, 1, 0)
     `, [name, normalizedPhone, email || null, tags || '']);
     
     const newContact = await dbGet('SELECT * FROM contacts WHERE id = ?', [result.lastID]);
@@ -3312,11 +3312,16 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
     
     // Verificar status na Evolution API para instâncias que estão "connecting"
     for (const instance of instances) {
-      if (instance.status === 'connecting' && instance.instance_id) {
+      if (instance.status === 'connecting' && (instance.instance_id || instance.instance_name)) {
         try {
-          const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instance.instance_id || instance.instance_name);
+          const instanceName = instance.instance_id || instance.instance_name;
+          logger.info(`Verificando status da instância ${instanceName} na Evolution API...`);
+          
+          const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instanceName);
           const state = evolutionStatus.state || evolutionStatus.status || '';
           const stateStr = String(state).toLowerCase();
+          
+          logger.info(`Status retornado pela Evolution API para ${instanceName}:`, { state, stateStr, fullResponse: evolutionStatus });
           
           let mappedStatus = instance.status;
           if (stateStr === 'open') {
@@ -3334,13 +3339,15 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
               WHERE id = ?
             `, [mappedStatus, phoneConnected, instance.id]);
             
+            logger.info(`Status da instância ${instanceName} atualizado: ${instance.status} -> ${mappedStatus}`);
+            
             // Atualizar na lista de retorno
             instance.status = mappedStatus;
             instance.phone_number = phoneConnected;
           }
         } catch (error: any) {
-          // Ignorar erros ao verificar status individual
-          logger.debug('Erro ao verificar status individual:', { error: error.message, instance: instance.instance_name });
+          // Logar erro mas continuar
+          logger.warn('Erro ao verificar status individual:', { error: error.message, instance: instance.instance_name || instance.instance_id });
         }
       }
     }
