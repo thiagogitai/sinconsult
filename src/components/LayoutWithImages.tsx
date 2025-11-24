@@ -45,6 +45,7 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
     { name: 'WhatsApp', href: '/whatsapp', icon: Phone },
     { name: 'SMS', href: '/sms', icon: MessageCircle },
     { name: 'Email', href: '/email', icon: Mail },
+    { name: 'Usuários', href: '/users', icon: Users },
     { name: 'Configurações', href: '/settings', icon: Settings },
   ];
 

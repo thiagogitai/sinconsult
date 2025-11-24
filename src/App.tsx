@@ -10,6 +10,7 @@ import WhatsAppInstances from "@/pages/WhatsAppInstances";
 import Settings from "@/pages/Settings";
 import SMS from "@/pages/SMS";
 import Email from "@/pages/Email";
+import Users from "@/pages/Users";
 import Login from "@/pages/Login";
 import ToastContainer from "@/components/ToastContainer";
 import { ToastProvider, useToastContext } from "@/contexts/ToastContext";
@@ -60,6 +61,7 @@ function AppContent() {
                   <Route path="/whatsapp" element={<WhatsAppInstances />} />
                   <Route path="/sms" element={<SMS />} />
                   <Route path="/email" element={<Email />} />
+                  <Route path="/users" element={<Users />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

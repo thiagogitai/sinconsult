@@ -59,27 +59,27 @@ const DashboardPremium: React.FC = () => {
       });
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
-        // Formatar dados para o formato esperado
+        // Formatar dados para o formato esperado (sem dados fake)
         setStats([
           {
             label: 'Total de Contatos',
             value: statsData.total_contacts || 0,
-            change: '+12%',
-            changeType: 'up',
+            change: '0%',
+            changeType: 'neutral',
             icon: 'Users'
           },
           {
             label: 'Mensagens Hoje',
             value: statsData.messages_sent_today || 0,
-            change: '+5%',
-            changeType: 'up',
+            change: '0%',
+            changeType: 'neutral',
             icon: 'MessageSquare'
           },
           {
             label: 'Taxa de Entrega',
             value: `${statsData.delivery_rate || 0}%`,
-            change: '+2%',
-            changeType: 'up',
+            change: '0%',
+            changeType: 'neutral',
             icon: 'CheckCircle'
           },
           {

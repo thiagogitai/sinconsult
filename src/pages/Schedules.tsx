@@ -162,6 +162,16 @@ const Schedules: React.FC = () => {
 
                   <div className="flex items-center space-x-3">
                     <button 
+                      onClick={() => {
+                        // Navegar para editar campanha
+                        window.location.href = `/campaigns?edit=${schedule.id}`;
+                      }}
+                      className="flex items-center space-x-2 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                    >
+                      <Settings className="h-4 w-4" />
+                      <span className="text-sm font-medium">Editar</span>
+                    </button>
+                    <button 
                       onClick={() => handlePause(schedule.id)}
                       className="flex items-center space-x-2 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200"
                     >

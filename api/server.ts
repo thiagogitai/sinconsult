@@ -2388,6 +2388,223 @@ app.delete('/api/notifications/:id', authenticateToken, asyncHandler(async (req,
   }
 }));
 
+// ===== ROTAS DE USUÁRIOS =====
+
+// Listar usuários (apenas admin)
+app.get('/api/users', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
+  try {
+    const users = await dbAll(`
+      SELECT 
+        id,
+        name,
+        email,
+        role,
+        is_active,
+        created_at
+      FROM users
+      ORDER BY created_at DESC
+    `);
+    
+    res.json(users.map((u: any) => ({
+      ...u,
+      is_active: u.is_active === 1 || u.is_active === true
+    })));
+  } catch (error) {
+    logger.error('Erro ao buscar usuários:', { error });
+    throw error;
+  }
+}));
+
+// Criar usuário (apenas admin)
+app.post('/api/users', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { name, email, password, role = 'user' } = req.body;
+    
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Nome, email e senha são obrigatórios' 
+      });
+    }
+    
+    // Validar email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email inválido' 
+      });
+    }
+    
+    // Validar senha
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Senha deve ter pelo menos 6 caracteres' 
+      });
+    }
+    
+    // Verificar se email já existe
+    const existingUser = await dbGet('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingUser) {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Email já cadastrado' 
+      });
+    }
+    
+    // Hash da senha
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    // Criar usuário
+    const result = await dbRun(
+      'INSERT INTO users (name, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, 1)',
+      [name, email, passwordHash, role]
+    );
+    
+    const newUser = await dbGet('SELECT id, name, email, role, is_active, created_at FROM users WHERE id = ?', [result.lastID]);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Usuário criado com sucesso',
+      data: newUser
+    });
+  } catch (error) {
+    logger.error('Erro ao criar usuário:', { error });
+    throw error;
+  }
+}));
+
+// Atualizar usuário (apenas admin)
+app.put('/api/users/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role, is_active, password } = req.body;
+    
+    // Verificar se usuário existe
+    const user = await dbGet('SELECT id FROM users WHERE id = ?', [id]);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Usuário não encontrado' 
+      });
+    }
+    
+    // Validar email se fornecido
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Email inválido' 
+        });
+      }
+      
+      // Verificar se email já existe em outro usuário
+      const existingUser = await dbGet('SELECT id FROM users WHERE email = ? AND id != ?', [email, id]);
+      if (existingUser) {
+        return res.status(409).json({ 
+          success: false, 
+          message: 'Email já cadastrado' 
+        });
+      }
+    }
+    
+    // Validar senha se fornecida
+    if (password && password.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Senha deve ter pelo menos 6 caracteres' 
+      });
+    }
+    
+    // Construir query de atualização
+    const updates: string[] = [];
+    const values: any[] = [];
+    
+    if (name) {
+      updates.push('name = ?');
+      values.push(name);
+    }
+    if (email) {
+      updates.push('email = ?');
+      values.push(email);
+    }
+    if (role) {
+      updates.push('role = ?');
+      values.push(role);
+    }
+    if (is_active !== undefined) {
+      updates.push('is_active = ?');
+      values.push(is_active ? 1 : 0);
+    }
+    if (password) {
+      const passwordHash = await bcrypt.hash(password, 10);
+      updates.push('password_hash = ?');
+      values.push(passwordHash);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Nenhum campo para atualizar' 
+      });
+    }
+    
+    values.push(id);
+    await dbRun(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+    
+    const updatedUser = await dbGet('SELECT id, name, email, role, is_active, created_at FROM users WHERE id = ?', [id]);
+    
+    res.json({
+      success: true,
+      message: 'Usuário atualizado com sucesso',
+      data: updatedUser
+    });
+  } catch (error) {
+    logger.error('Erro ao atualizar usuário:', { error });
+    throw error;
+  }
+}));
+
+// Deletar usuário (apenas admin)
+app.delete('/api/users/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.userId;
+    
+    // Não permitir deletar a si mesmo
+    if (parseInt(id) === userId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Você não pode deletar seu próprio usuário' 
+      });
+    }
+    
+    // Verificar se usuário existe
+    const user = await dbGet('SELECT id FROM users WHERE id = ?', [id]);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Usuário não encontrado' 
+      });
+    }
+    
+    await dbRun('DELETE FROM users WHERE id = ?', [id]);
+    
+    res.json({
+      success: true,
+      message: 'Usuário deletado com sucesso'
+    });
+  } catch (error) {
+    logger.error('Erro ao deletar usuário:', { error });
+    throw error;
+  }
+}));
+
 // ===== ROTAS DE CONFIGURAÇÕES =====
 
 // Criar tabela de configurações se não existir

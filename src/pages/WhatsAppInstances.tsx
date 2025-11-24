@@ -89,10 +89,9 @@ export default function WhatsAppInstances() {
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
       const response = await fetch(`${apiBase}/whatsapp/instances`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -179,10 +178,12 @@ export default function WhatsAppInstances() {
     try {
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
-      const response = await fetch(`${apiBase}/whatsapp/instances/${instance.name}`, {
+      const instanceId = instance.id || instance.instance_name;
+      const response = await fetch(`${apiBase}/whatsapp/instances/${instanceId}`, {
+        method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
-        method: 'DELETE'
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       if (response.ok) {
