@@ -98,7 +98,7 @@ export const campaignsAPI = {
   start: (id: string) =>
     api.post(`/campaigns/${id}/start`),
   pause: (id: string) =>
-    api.post(`/campaigns/${id}/pause`),
+    api.post(`/campaigns/${id}/pause`).then(res => res.data),
   stop: (id: string) =>
     api.post(`/campaigns/${id}/stop`),
   getStats: (id: string) =>

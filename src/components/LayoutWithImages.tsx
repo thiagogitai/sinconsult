@@ -23,6 +23,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import NotificationsDropdown from './NotificationsDropdown';
 import SearchBar from './SearchBar';
+import StatsSidebar from './StatsSidebar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -192,29 +193,7 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
                 </div>
 
                 {/* Seção de Estatísticas Rápidas */}
-                <div className="border-t border-white/20 pt-4">
-                  <h3 className="px-3 text-xs font-semibold text-white/60 uppercase tracking-wider">Estatísticas</h3>
-                  <div className="mt-3 space-y-2">
-                    <div className="px-3 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-white/70">Contatos</span>
-                        <span className="text-sm font-semibold text-green-400">1,247</span>
-                      </div>
-                    </div>
-                    <div className="px-3 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-white/70">Campanhas</span>
-                        <span className="text-sm font-semibold text-gray-700">23</span>
-                      </div>
-                    </div>
-                    <div className="px-3 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-white/70">Taxa Entrega</span>
-                        <span className="text-sm font-semibold text-emerald-400">94%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <StatsSidebar />
               </nav>
 
               {/* Status do Sistema */}

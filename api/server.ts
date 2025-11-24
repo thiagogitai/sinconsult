@@ -926,6 +926,25 @@ app.patch('/api/campaigns/:id/status', authenticateToken, asyncHandler(async (re
   }
 }));
 
+// Pausar campanha (requer autenticação)
+app.post('/api/campaigns/:id/pause', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    await dbRun(`
+      UPDATE campaigns 
+      SET status = 'paused', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [id]);
+    
+    const updatedCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    res.json({ success: true, data: updatedCampaign });
+  } catch (error) {
+    logger.error('Erro ao pausar campanha:', { error });
+    throw error;
+  }
+}));
+
 // Deletar campanha (requer autenticação)
 app.delete('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) => {
   try {
