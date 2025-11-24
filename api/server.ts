@@ -49,10 +49,26 @@ async function loadEvolutionConfigFromDB() {
     const keyRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['evolutionApiKey', 'api']);
     const url = (urlRow && urlRow.value) ? urlRow.value : process.env.EVOLUTION_API_URL;
     const key = (keyRow && keyRow.value) ? keyRow.value : process.env.EVOLUTION_API_KEY;
-    if (url) process.env.EVOLUTION_API_URL = url;
-    if (key) process.env.EVOLUTION_API_KEY = key;
+    
+    // Atualizar variáveis de ambiente
+    if (url) {
+      process.env.EVOLUTION_API_URL = url;
+    }
+    if (key) {
+      process.env.EVOLUTION_API_KEY = key;
+    }
+    
+    // Atualizar instância do EvolutionAPI
     evolutionAPI.setConfig(url, key);
-  } catch {}
+    
+    logger.info('Configurações do Evolution carregadas do banco de dados', {
+      url: url || 'não configurado',
+      hasKey: !!key && key !== 'your-api-key'
+    });
+  } catch (error: any) {
+    logger.warn('Erro ao carregar configurações do Evolution do banco:', { error: error.message });
+    // Continuar usando configurações do .env se houver erro
+  }
 }
 
 // Validar e gerar JWT_SECRET se necessário
@@ -3429,6 +3445,11 @@ app.post('/api/whatsapp/instances',
         error: 'Nome da instância é obrigatório'
       });
     }
+    
+    // Carregar configurações do Evolution do banco de dados antes de usar
+    console.log('Carregando configurações do Evolution do banco de dados...');
+    await loadEvolutionConfigFromDB();
+    console.log('Configurações carregadas. URL:', process.env.EVOLUTION_API_URL);
     
     // Verificar se Evolution API está acessível
     console.log('Verificando conexão com Evolution API...');

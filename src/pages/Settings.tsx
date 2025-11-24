@@ -532,17 +532,20 @@ const SettingsPage: React.FC = () => {
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">API Keys</h3>
                 
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Evolution API Key</span>
-                    <button className="text-sm text-green-600 hover:text-green-700">Regenerar</button>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Evolution API Key</label>
+                    <input
+                      type="password"
+                      value={apiSettings.evolutionApiKey}
+                      onChange={(e) => setApiSettings({ ...apiSettings, evolutionApiKey: e.target.value })}
+                      placeholder="Cole sua Evolution API Key aqui"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Esta chave é usada para se conectar ao Evolution API. Mantenha-a segura e não a compartilhe.
+                    </p>
                   </div>
-                  <div className="bg-white p-3 rounded border font-mono text-sm break-all">
-                    {apiSettings.evolutionApiKey ? '••••••••••••••••' : 'Não configurado'}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Esta chave é usada para se conectar ao Evolution API. Mantenha-a segura e não a compartilhe.
-                  </p>
                 </div>
               </div>
 
@@ -555,8 +558,12 @@ const SettingsPage: React.FC = () => {
                       type="text"
                       value={apiSettings.evolutionApiUrl}
                       onChange={(e) => setApiSettings({ ...apiSettings, evolutionApiUrl: e.target.value })}
+                      placeholder="http://localhost:8080"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      URL base da sua instância Evolution API (ex: http://localhost:8080)
+                    </p>
                   </div>
                   
                   <div>
