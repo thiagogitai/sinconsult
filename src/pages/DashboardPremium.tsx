@@ -8,6 +8,7 @@ import {
   TrendingUp,
   CheckCircle,
   AlertCircle,
+  XCircle,
   BarChart3,
   Activity,
   Globe,
