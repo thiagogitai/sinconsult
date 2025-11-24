@@ -555,6 +555,31 @@ function createTables() {
         if (err) console.warn('Erro ao criar índice messages_status:', err);
       });
 
+      // Tabela de notificações
+      db.run(`CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        type TEXT DEFAULT 'info',
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        read BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`, (err) => {
+        if (err) console.warn('Erro ao criar tabela notifications:', err);
+      });
+
+      // Tabela de configurações da aplicação
+      db.run(`CREATE TABLE IF NOT EXISTS app_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT UNIQUE NOT NULL,
+        value TEXT,
+        category TEXT DEFAULT 'general',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`, (err) => {
+        if (err) console.warn('Erro ao criar tabela app_settings:', err);
+      });
+
       // Inserir usuário admin padrão
       db.get('SELECT id FROM users WHERE email = ?', ['admin@crm.com'], (err, row) => {
         if (!row) {
@@ -2325,18 +2350,7 @@ app.get('/api/tts/voices/:provider', authenticateToken, asyncHandler(async (req,
 }));
 
 // ===== ROTAS DE NOTIFICAÇÕES =====
-
-// Criar tabela de notificações se não existir
-db.run(`CREATE TABLE IF NOT EXISTS notifications (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  type TEXT DEFAULT 'info',
-  title TEXT NOT NULL,
-  message TEXT NOT NULL,
-  read BOOLEAN DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-)`, () => {});
+// (Tabela de notificações criada em createTables())
 
 // Listar notificações (requer autenticação)
 app.get('/api/notifications', authenticateToken, asyncHandler(async (req, res) => {
@@ -2625,15 +2639,7 @@ app.delete('/api/users/:id', authenticateToken, requireAdmin, asyncHandler(async
 }));
 
 // ===== ROTAS DE CONFIGURAÇÕES =====
-
-// Criar tabela de configurações se não existir
-db.run(`CREATE TABLE IF NOT EXISTS app_settings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  key TEXT UNIQUE NOT NULL,
-  value TEXT,
-  category TEXT DEFAULT 'general',
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)`, () => {});
+// (Tabela de configurações criada em createTables())
 
 // Buscar configurações (requer autenticação)
 app.get('/api/settings', authenticateToken, asyncHandler(async (req, res) => {
