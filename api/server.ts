@@ -206,6 +206,20 @@ async function createNotification(userId: number | null, type: string, title: st
   }
 }
 
+// Função auxiliar para criar notificações (definida após inicialização do banco)
+async function createNotification(userId: number | null, type: string, title: string, message: string): Promise<void> {
+  try {
+    await dbRun(`
+      INSERT INTO notifications (user_id, type, title, message, read, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `, [userId, type, title, message, false]);
+    
+    console.log(`✅ Notificação criada: ${title} - ${message}`);
+  } catch (error) {
+    console.error('Erro ao criar notificação:', error);
+  }
+}
+
 // Configuração do multer para upload de arquivos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
