@@ -2305,6 +2305,146 @@ app.get('/api/tts/voices/:provider', authenticateToken, asyncHandler(async (req,
   }
 }));
 
+// ===== ROTAS DE NOTIFICAÇÕES =====
+
+// Criar tabela de notificações se não existir
+db.run(`CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  type TEXT DEFAULT 'info',
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  read BOOLEAN DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)`, () => {});
+
+// Listar notificações (requer autenticação)
+app.get('/api/notifications', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const notifications = await dbAll(`
+      SELECT 
+        id,
+        type,
+        title,
+        message,
+        read,
+        created_at as createdAt
+      FROM notifications
+      WHERE user_id = ? OR user_id IS NULL
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [userId]);
+    
+    const unreadCount = notifications.filter((n: any) => !n.read).length;
+    
+    res.json({
+      notifications: notifications.map((n: any) => ({
+        ...n,
+        read: n.read === 1 || n.read === true
+      })),
+      unread_count: unreadCount
+    });
+  } catch (error) {
+    logger.error('Erro ao buscar notificações:', { error });
+    throw error;
+  }
+}));
+
+// Marcar notificação como lida (requer autenticação)
+app.post('/api/notifications/:id/read', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    await dbRun('UPDATE notifications SET read = 1 WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Erro ao marcar notificação como lida:', { error });
+    throw error;
+  }
+}));
+
+// Marcar todas como lidas (requer autenticação)
+app.post('/api/notifications/read-all', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const userId = (req as any).user?.userId;
+    await dbRun('UPDATE notifications SET read = 1 WHERE user_id = ? OR user_id IS NULL', [userId]);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Erro ao marcar todas como lidas:', { error });
+    throw error;
+  }
+}));
+
+// Deletar notificação (requer autenticação)
+app.delete('/api/notifications/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    await dbRun('DELETE FROM notifications WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Erro ao deletar notificação:', { error });
+    throw error;
+  }
+}));
+
+// ===== ROTAS DE CONFIGURAÇÕES =====
+
+// Criar tabela de configurações se não existir
+db.run(`CREATE TABLE IF NOT EXISTS app_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT UNIQUE NOT NULL,
+  value TEXT,
+  category TEXT DEFAULT 'general',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`, () => {});
+
+// Buscar configurações (requer autenticação)
+app.get('/api/settings', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { category } = req.query;
+    let query = 'SELECT key, value, category FROM app_settings WHERE 1=1';
+    const params: any[] = [];
+    
+    if (category) {
+      query += ' AND category = ?';
+      params.push(category);
+    }
+    
+    const settings = await dbAll(query, params);
+    
+    // Converter para objeto
+    const settingsObj: any = {};
+    settings.forEach((s: any) => {
+      settingsObj[s.key] = s.value;
+    });
+    
+    res.json(settingsObj);
+  } catch (error) {
+    logger.error('Erro ao buscar configurações:', { error });
+    throw error;
+  }
+}));
+
+// Salvar configurações (requer autenticação)
+app.post('/api/settings', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const settings = req.body;
+    
+    for (const [key, value] of Object.entries(settings)) {
+      await dbRun(`
+        INSERT OR REPLACE INTO app_settings (key, value, category, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+      `, [key, String(value), 'general']);
+    }
+    
+    res.json({ success: true, message: 'Configurações salvas com sucesso' });
+  } catch (error) {
+    logger.error('Erro ao salvar configurações:', { error });
+    throw error;
+  }
+}));
+
 // ===== ROTAS DO DASHBOARD =====
 // (Rotas duplicadas removidas - já existem acima)
 

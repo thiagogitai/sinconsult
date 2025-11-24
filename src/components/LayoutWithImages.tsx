@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, 
   Users, 
@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   ChevronDown,
-  Bell,
   Search,
   Globe,
   Zap,
@@ -21,6 +20,8 @@ import {
   Mail,
   MessageCircle
 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import NotificationsDropdown from './NotificationsDropdown';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -30,6 +31,8 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: BarChart3 },
@@ -105,10 +108,7 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
           {/* Área do Usuário */}
           <div className="flex items-center space-x-4">
             {/* Notificações */}
-            <button className="relative p-2 text-white hover:text-gray-200 hover:bg-white/10 rounded-lg">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">3</span>
-            </button>
+            <NotificationsDropdown />
 
             {/* Busca */}
             <div className="hidden md:flex items-center bg-white/10 rounded-lg px-3 py-2">
@@ -130,8 +130,8 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
                   <span className="text-sm font-medium text-white">AD</span>
                 </div>
                 <div className="hidden sm:block text-left">
-                  <p className="text-sm font-medium text-white">Administrador</p>
-                  <p className="text-xs text-white/80">admin@simconsult.com</p>
+                  <p className="text-sm font-medium text-white">{user?.name || 'Administrador'}</p>
+                  <p className="text-xs text-white/80">{user?.email || 'admin@simconsult.com'}</p>
                 </div>
                 <ChevronDown className="h-4 w-4 text-white/60" />
               </button>
@@ -147,7 +147,13 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
                     <Settings className="h-4 w-4 mr-2" />
                     Configurações
                   </Link>
-                  <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                  <button
+                    onClick={async () => {
+                      await logout();
+                      navigate('/login');
+                    }}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
                     <LogOut className="h-4 w-4 mr-2" />
                     Sair
                   </button>

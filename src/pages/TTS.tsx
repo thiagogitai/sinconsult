@@ -115,10 +115,13 @@ const TTS: React.FC = () => {
 
     setIsGenerating(true);
     try {
-      const response = await fetch('http://localhost:3020/api/tts/generate', {
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/tts/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           text: testText,
