@@ -1,5 +1,6 @@
 // Configuração PM2 para produção na Hostinger (CommonJS)
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 module.exports = {
   apps: [{
@@ -7,10 +8,18 @@ module.exports = {
     script: './dist-server/api/server.js',
     instances: 1,
     exec_mode: 'fork',
-    env_file: '.env',
+    cwd: __dirname,
     env: {
       NODE_ENV: 'production',
-      PORT: 3006
+      PORT: process.env.PORT || 3006,
+      JWT_SECRET: process.env.JWT_SECRET,
+      FRONTEND_URL: process.env.FRONTEND_URL || 'https://certcrm.com.br',
+      EVOLUTION_API_URL: process.env.EVOLUTION_API_URL,
+      EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
+      ZENVIA_API_TOKEN: process.env.ZENVIA_API_TOKEN,
+      ZENVIA_FROM: process.env.ZENVIA_FROM
     },
     error_file: './logs/pm2-error.log',
     out_file: './logs/pm2-out.log',
