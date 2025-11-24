@@ -1,10 +1,7 @@
 import axios from 'axios';
 
 // Usar variável de ambiente ou detectar automaticamente
-const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  (window.location.hostname === 'localhost' 
-    ? 'http://localhost:3006/api' 
-    : 'https://certcrm.com.br/api');
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

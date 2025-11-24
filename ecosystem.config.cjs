@@ -14,6 +14,7 @@ module.exports = {
       PORT: process.env.PORT || 3006,
       JWT_SECRET: process.env.JWT_SECRET,
       FRONTEND_URL: process.env.FRONTEND_URL || 'https://certcrm.com.br',
+      VITE_API_URL: process.env.VITE_API_URL || '/api',
       EVOLUTION_API_URL: process.env.EVOLUTION_API_URL,
       EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY,
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
