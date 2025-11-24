@@ -85,7 +85,7 @@ const Dashboard: React.FC = () => {
     },
     {
       name: 'Taxa de Entrega',
-      value: dashboardData?.deliveryRate ? `${dashboardData.deliveryRate}%` : '94.2%',
+      value: dashboardData?.deliveryRate ? `${dashboardData.deliveryRate}%` : '0%',
       change: '+2.1%',
       changeType: 'up',
       icon: CheckCircle,

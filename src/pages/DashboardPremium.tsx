@@ -200,7 +200,7 @@ const DashboardPremium: React.FC = () => {
                 
                 <div className="relative">
                   <div className="flex items-center justify-between mb-4 sm:mb-6">
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gray-800 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 bg-green-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                       <Icon className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                     </div>
                     <div className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold ${trendColor} bg-opacity-10 border-2 ${trendColor.replace('text-', 'border-')} border-opacity-20`}>
@@ -322,12 +322,8 @@ const DashboardPremium: React.FC = () => {
           </div>
           <div className="p-8">
             <div className="space-y-6">
-              {/* Simulação de instâncias */}
-              {[
-                { name: 'Principal', phone: '+55 11 99999-9999', status: 'connected' },
-                { name: 'Suporte', phone: '+55 11 98888-8888', status: 'connected' },
-                { name: 'Vendas', phone: '+55 11 97777-7777', status: 'connecting' }
-              ].map((instance, index) => (
+              {whatsappInstances.length > 0 ? (
+                whatsappInstances.map((instance, index) => (
                 <div key={index} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-100">
                   <div className="flex items-center space-x-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -342,8 +338,8 @@ const DashboardPremium: React.FC = () => {
                       }
                     </div>
                     <div>
-                      <h4 className="font-black text-gray-900">{instance.name}</h4>
-                      <p className="text-sm font-semibold text-gray-600">{instance.phone}</p>
+                      <h4 className="font-black text-gray-900">{instance.name || instance.instance_name}</h4>
+                      <p className="text-sm font-semibold text-gray-600">{instance.phone_number || instance.phone_connected || 'Não conectado'}</p>
                     </div>
                   </div>
                   <span className={`px-3 py-1 text-xs font-black rounded-full border-2 ${
@@ -352,10 +348,16 @@ const DashboardPremium: React.FC = () => {
                     'bg-red-100 text-red-800 border-red-200'
                   }`}>
                     {instance.status === 'connected' ? 'Conectado' :
-                     instance.status === 'connecting' ? 'Conectando' : 'Erro'}
+                     instance.status === 'connecting' ? 'Conectando' : 'Desconectado'}
                   </span>
                 </div>
-              ))}
+              ))
+              ) : (
+                <div className="text-center py-6">
+                  <Phone className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Nenhuma instância configurada</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
