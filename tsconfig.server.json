@@ -11,7 +11,9 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": false,
-    "types": ["node", "express"]
+    "types": ["node", "express"],
+    "allowImportingTsExtensions": false,
+    "noEmit": false
   },
   "include": [
     "api/**/*"

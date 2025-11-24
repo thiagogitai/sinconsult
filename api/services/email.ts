@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/logger.js';
 
 /**
  * Interface para serviços de Email

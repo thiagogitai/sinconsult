@@ -12,16 +12,16 @@ import cron from 'node-cron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import EvolutionAPI from './services/evolution';
-import { TTSServiceFactory, saveAudioFile, generateAudioFilename } from './services/tts';
-import { authenticateToken } from './middleware/auth';
-import { errorHandler, asyncHandler } from './middleware/errorHandler';
-import { defaultRateLimiter, authRateLimiter } from './middleware/rateLimiter';
-import { logger } from './utils/logger';
-import { validate, schemas } from './utils/validators';
-import { validatePhone, normalizePhone } from './utils/phoneValidator';
-import { SMSServiceFactory } from './services/sms';
-import { EmailServiceFactory } from './services/email';
+import EvolutionAPI from './services/evolution.js';
+import { TTSServiceFactory, saveAudioFile, generateAudioFilename } from './services/tts.js';
+import { authenticateToken } from './middleware/auth.js';
+import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
+import { defaultRateLimiter, authRateLimiter } from './middleware/rateLimiter.js';
+import { logger } from './utils/logger.js';
+import { validate, schemas } from './utils/validators.js';
+import { validatePhone, normalizePhone } from './utils/phoneValidator.js';
+import { SMSServiceFactory } from './services/sms.js';
+import { EmailServiceFactory } from './services/email.js';
 
 // Definir __dirname para ES modules
 const __filename = fileURLToPath(import.meta.url);
