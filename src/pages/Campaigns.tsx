@@ -283,7 +283,8 @@ const Campaigns: React.FC = () => {
         sms_template_id: '',
         email_config_id: '',
         email_subject: '',
-        email_template_id: ''
+        email_template_id: '',
+        media_url: ''
       });
       fetchCampaigns();
     } catch (error) {
