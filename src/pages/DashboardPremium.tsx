@@ -200,7 +200,7 @@ const DashboardPremium: React.FC = () => {
                 
                 <div className="relative">
                   <div className="flex items-center justify-between mb-4 sm:mb-6">
-                    <div className={`w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br ${stat.color} rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gray-800 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                       <Icon className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                     </div>
                     <div className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold ${trendColor} bg-opacity-10 border-2 ${trendColor.replace('text-', 'border-')} border-opacity-20`}>
