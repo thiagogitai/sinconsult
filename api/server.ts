@@ -3310,12 +3310,12 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
       ORDER BY created_at DESC
     `);
     
-    // Verificar status na Evolution API para instâncias que estão "connecting"
+    // Verificar status na Evolution API para instâncias que estão "connecting" ou "created"
     for (const instance of instances) {
-      if (instance.status === 'connecting' && (instance.instance_id || instance.instance_name)) {
+      if ((instance.status === 'connecting' || instance.status === 'created') && (instance.instance_id || instance.instance_name)) {
         try {
           const instanceName = instance.instance_id || instance.instance_name;
-          logger.info(`Verificando status da instância ${instanceName} na Evolution API...`);
+          logger.info(`Verificando status da instância ${instanceName} na Evolution API (status atual: ${instance.status})...`);
           
           const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instanceName);
           
@@ -3541,7 +3541,23 @@ app.post('/api/whatsapp/instances',
     
     // A resposta do Evolution API pode ter diferentes formatos
     const instanceId = evolutionInstance.instanceId || evolutionInstance.instanceName || instanceName;
-    const qrcode = evolutionInstance.qrcode || evolutionInstance.qrcodeBase64 || null;
+    let qrcode = evolutionInstance.qrcode || evolutionInstance.qrcodeBase64 || null;
+    
+    // Se não tiver QR code, tentar gerar chamando connectInstance
+    if (!qrcode) {
+      try {
+        logger.info('QR code não veio na criação, tentando gerar via connectInstance...');
+        const connectionData = await evolutionAPI.connectInstance(instanceName);
+        qrcode = (connectionData as any).base64 || (connectionData as any).qrcode || null;
+        if (qrcode && qrcode.startsWith('data:image')) {
+          qrcode = qrcode.split(',')[1]; // Remover prefixo data:image
+        }
+        logger.info('QR code gerado via connectInstance:', { hasQRCode: !!qrcode });
+      } catch (error: any) {
+        logger.warn('Erro ao gerar QR code via connectInstance:', { error: error.message });
+      }
+    }
+    
     // Status inicial deve ser "connecting" se tiver QR code, senão "created"
     const status = qrcode ? 'connecting' : (evolutionInstance.status || 'created');
     
