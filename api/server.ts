@@ -30,15 +30,33 @@ const __dirname = path.dirname(__filename);
 // Carregar variáveis de ambiente
 dotenv.config();
 
-// Validar variáveis de ambiente críticas
+// Validar e gerar JWT_SECRET se necessário
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secret-jwt-key-change-this-in-production') {
-  logger.error('JWT_SECRET não configurado ou usando valor padrão!');
-  if (process.env.NODE_ENV === 'production') {
-    logger.error('Encerrando servidor por falta de configuração de segurança');
-    process.exit(1);
-  } else {
-    logger.warn('⚠️  Usando JWT_SECRET padrão - NÃO USE EM PRODUÇÃO!');
+  // Gerar JWT_SECRET automaticamente
+  const crypto = await import('crypto');
+  const generatedSecret = crypto.randomBytes(64).toString('hex');
+  process.env.JWT_SECRET = generatedSecret;
+  
+  // Tentar salvar no .env
+  try {
+    const envPath = path.join(__dirname, '../.env');
+    if (fs.existsSync(envPath)) {
+      let envContent = fs.readFileSync(envPath, 'utf8');
+      if (!envContent.includes('JWT_SECRET=')) {
+        envContent += `\nJWT_SECRET=${generatedSecret}\n`;
+        fs.writeFileSync(envPath, envContent);
+        logger.info('✅ JWT_SECRET gerado e salvo automaticamente no .env');
+      }
+    } else {
+      // Criar .env se não existir
+      fs.writeFileSync(envPath, `JWT_SECRET=${generatedSecret}\nPORT=3006\nNODE_ENV=production\n`);
+      logger.info('✅ Arquivo .env criado com JWT_SECRET gerado automaticamente');
+    }
+  } catch (error) {
+    logger.warn('⚠️  Não foi possível salvar JWT_SECRET no .env, usando em memória');
   }
+  
+  logger.info('✅ JWT_SECRET gerado automaticamente');
 }
 
 const app = express();
