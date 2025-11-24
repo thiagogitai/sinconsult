@@ -2817,7 +2817,16 @@ app.get('/api/whatsapp/health', authenticateToken, asyncHandler(async (req, res)
 // Criar instância (requer autenticação)
 app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWhatsAppInstance), asyncHandler(async (req, res) => {
   try {
-    const { instance_name, phone_number } = req.body;
+    const { name, instance_name, phone_number, phone } = req.body;
+    const instanceName = name || instance_name;
+    const phoneNumber = phone_number || phone;
+    
+    if (!instanceName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nome da instância é obrigatório'
+      });
+    }
     
     // Verificar se Evolution API está acessível
     const isConnected = await evolutionAPI.checkConnection();
@@ -2830,10 +2839,10 @@ app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWh
     }
     
     // Criar instância na Evolution API
-    const evolutionInstance = await evolutionAPI.createInstance(instance_name, phone_number);
+    const evolutionInstance = await evolutionAPI.createInstance(instanceName, phoneNumber);
     
     // A resposta do Evolution API pode ter diferentes formatos
-    const instanceId = evolutionInstance.instanceId || evolutionInstance.instanceName || instance_name;
+    const instanceId = evolutionInstance.instanceId || evolutionInstance.instanceName || instanceName;
     const qrcode = evolutionInstance.qrcode || evolutionInstance.qrcodeBase64 || null;
     const status = evolutionInstance.status || 'created';
     
@@ -2841,7 +2850,7 @@ app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWh
     const result = await dbRun(`
       INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, qrcode)
       VALUES (?, ?, ?, ?, ?)
-    `, [instance_name, instanceId, phone_number || null, status, qrcode || null]);
+    `, [instanceName, instanceId, phoneNumber || null, status, qrcode || null]);
     
     const newInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [result.lastID]);
     
