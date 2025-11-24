@@ -39,3 +39,6 @@ data/*.db-journal
 build
 *.tsbuildinfo
 dist-server
+
+# Documentation (never commit)
+*.md
