@@ -14,7 +14,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import EvolutionAPI from './services/evolution.js';
 import { TTSServiceFactory, saveAudioFile, generateAudioFilename } from './services/tts.js';
-import { authenticateToken } from './middleware/auth.js';
+import { authenticateToken, requireAdmin } from './middleware/auth.js';
 import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
 import { defaultRateLimiter, authRateLimiter } from './middleware/rateLimiter.js';
 import { logger } from './utils/logger.js';

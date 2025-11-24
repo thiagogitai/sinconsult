@@ -22,6 +22,8 @@ import { useToast } from '@/hooks/use-toast';
 interface WhatsAppInstance {
   id: number;
   name: string;
+  instance_name?: string;
+  instance_id?: string;
   phone_number: string | null;
   qrcode: string | null;
   status: 'connected' | 'disconnected' | 'connecting' | 'error';
@@ -140,7 +142,7 @@ export default function WhatsAppInstances() {
     try {
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
-      const instanceId = instance.id || instance.instance_name;
+      const instanceId = instance.id || instance.instance_id || instance.name;
       const response = await fetch(`${apiBase}/whatsapp/instances/${instanceId}/connect`, {
         method: 'POST',
         headers: {
@@ -178,7 +180,7 @@ export default function WhatsAppInstances() {
     try {
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
-      const instanceId = instance.id || instance.instance_name;
+      const instanceId = instance.id || instance.instance_id || instance.name;
       const response = await fetch(`${apiBase}/whatsapp/instances/${instanceId}`, {
         method: 'DELETE',
         headers: {
