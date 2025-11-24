@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import NotificationsDropdown from './NotificationsDropdown';
+import SearchBar from './SearchBar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -111,14 +112,7 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
             <NotificationsDropdown />
 
             {/* Busca */}
-            <div className="hidden md:flex items-center bg-white/10 rounded-lg px-3 py-2">
-              <Search className="h-4 w-4 text-white/60 mr-2" />
-              <input
-                type="text"
-                placeholder="Buscar..."
-                className="bg-transparent border-none outline-none text-sm text-white placeholder-white/60 w-32 focus:w-48 transition-all"
-              />
-            </div>
+            <SearchBar />
 
             {/* Menu do Usuário */}
             <div className="relative">

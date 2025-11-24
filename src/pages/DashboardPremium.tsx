@@ -48,22 +48,67 @@ const DashboardPremium: React.FC = () => {
 
   const fetchDashboardData = async () => {
     try {
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      
       // Buscar estatísticas do dashboard
-      const statsResponse = await fetch('http://localhost:3020/api/dashboard/stats');
+      const statsResponse = await fetch(`${apiBase}/dashboard/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
-        setStats(statsData);
+        // Formatar dados para o formato esperado
+        setStats([
+          {
+            label: 'Total de Contatos',
+            value: statsData.total_contacts || 0,
+            change: '+12%',
+            changeType: 'up',
+            icon: 'Users'
+          },
+          {
+            label: 'Mensagens Hoje',
+            value: statsData.messages_sent_today || 0,
+            change: '+5%',
+            changeType: 'up',
+            icon: 'MessageSquare'
+          },
+          {
+            label: 'Taxa de Entrega',
+            value: `${statsData.delivery_rate || 0}%`,
+            change: '+2%',
+            changeType: 'up',
+            icon: 'CheckCircle'
+          },
+          {
+            label: 'Instâncias Ativas',
+            value: statsData.active_instances || 0,
+            change: '0%',
+            changeType: 'neutral',
+            icon: 'Phone'
+          }
+        ]);
       }
 
       // Buscar campanhas recentes
-      const campaignsResponse = await fetch('http://localhost:3020/api/campaigns/recent');
+      const campaignsResponse = await fetch(`${apiBase}/dashboard/recent-campaigns`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (campaignsResponse.ok) {
         const campaignsData = await campaignsResponse.json();
-        setRecentCampaigns(campaignsData.campaigns || []);
+        setRecentCampaigns(campaignsData || []);
       }
 
       // Buscar instâncias WhatsApp
-      const whatsappResponse = await fetch('http://localhost:3020/api/whatsapp/instances');
+      const whatsappResponse = await fetch(`${apiBase}/whatsapp/instances`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (whatsappResponse.ok) {
         const whatsappData = await whatsappResponse.json();
         setWhatsappInstances(whatsappData || []);
