@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, 
@@ -35,6 +35,24 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Fechar menu ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [userMenuOpen]);
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: BarChart3 },
@@ -70,7 +88,7 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
       </div>
 
       {/* Header com Logo PNG */}
-      <header className="relative z-10 bg-white/10 backdrop-blur-md border-b border-white/20">
+      <header className="relative z-40 bg-white/10 backdrop-blur-md border-b border-white/20">
         <div className="flex items-center justify-between px-6 py-4">
           {/* Logo e Menu Mobile */}
           <div className="flex items-center space-x-4">
@@ -117,11 +135,13 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
             <SearchBar />
 
             {/* Menu do Usuário */}
-            <div className="relative">
+            <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => {
                   setSidebarOpen(false)
-                  setUserMenuOpen(!userMenuOpen)
+                  setTimeout(() => {
+                    setUserMenuOpen(!userMenuOpen)
+                  }, 50)
                 }}
                 className="flex items-center space-x-2 p-2 rounded-lg hover:bg-white/10"
               >
@@ -137,7 +157,7 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
 
               {/* Dropdown Menu */}
               {userMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white/95 backdrop-blur-md rounded-lg shadow-xl border border-white/20 py-1 z-50">
+                <div className="absolute right-0 mt-2 w-48 bg-white/95 backdrop-blur-md rounded-lg shadow-xl border border-white/20 py-1 z-50" style={{zIndex: 9999}}>
                   <Link
                     to="/settings"
                     className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -250,7 +270,7 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
       {/* Overlay para mobile */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 z-20 bg-black bg-opacity-50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black bg-opacity-50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
