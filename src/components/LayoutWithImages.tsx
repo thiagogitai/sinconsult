@@ -20,7 +20,7 @@ import {
   Mail,
   MessageCircle
 } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import NotificationsDropdown from './NotificationsDropdown';
 import SearchBar from './SearchBar';
 import StatsSidebar from './StatsSidebar';
@@ -119,7 +119,10 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
             {/* Menu do Usuário */}
             <div className="relative">
               <button
-                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                onClick={() => {
+                  setSidebarOpen(false)
+                  setUserMenuOpen(!userMenuOpen)
+                }}
                 className="flex items-center space-x-2 p-2 rounded-lg hover:bg-white/10"
               >
                 <div className="h-8 w-8 bg-gradient-to-br from-green-500 to-green-700 rounded-full flex items-center justify-center">
@@ -138,15 +141,20 @@ const LayoutWithImages: React.FC<LayoutProps> = ({ children }) => {
                   <Link
                     to="/settings"
                     className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => setUserMenuOpen(false)}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setUserMenuOpen(false)
+                      navigate('/settings')
+                    }}
                   >
                     <Settings className="h-4 w-4 mr-2" />
                     Configurações
                   </Link>
                   <button
                     onClick={async () => {
-                      await logout();
-                      navigate('/login');
+                      setUserMenuOpen(false)
+                      await logout()
+                      navigate('/login')
                     }}
                     className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   >

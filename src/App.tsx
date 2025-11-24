@@ -14,7 +14,7 @@ import Users from "@/pages/Users";
 import Login from "@/pages/Login";
 import ToastContainer from "@/components/ToastContainer";
 import { ToastProvider, useToastContext } from "@/contexts/ToastContext";
-import { useAuth } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
 
 function AppContent() {
@@ -79,9 +79,11 @@ function AppContent() {
 
 function App() {
   return (
-    <ToastProvider>
-      <AppContent />
-    </ToastProvider>
+    <AuthProvider>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
+    </AuthProvider>
   );
 }
 

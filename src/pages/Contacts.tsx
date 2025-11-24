@@ -14,8 +14,10 @@ import {
   MoreVertical,
   UserPlus
 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const Contacts: React.FC = () => {
+  const { toast } = useToast();
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

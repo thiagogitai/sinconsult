@@ -43,7 +43,7 @@ export default function WhatsAppInstances() {
   const fetchInstances = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3015/api/whatsapp/instances');
+      const response = await fetch('https://certcrm.com.br/api/whatsapp/instances');
       const data = await response.json();
       
       if (response.ok) {
@@ -129,7 +129,7 @@ export default function WhatsAppInstances() {
   // Obter QR Code
   const getQRCode = async (instance: WhatsAppInstance) => {
     try {
-      const response = await fetch(`http://localhost:3015/api/whatsapp/instances/${instance.name}/qrcode`);
+      const response = await fetch(`https://certcrm.com.br/api/whatsapp/instances/${instance.name}/qrcode`);
       const data = await response.json();
 
       if (response.ok) {
@@ -159,7 +159,7 @@ export default function WhatsAppInstances() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3015/api/whatsapp/instances/${instance.name}`, {
+      const response = await fetch(`https://certcrm.com.br/api/whatsapp/instances/${instance.name}`, {
         method: 'DELETE'
       });
 

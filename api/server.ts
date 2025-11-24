@@ -75,10 +75,18 @@ app.use(helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'"],
+      upgradeInsecureRequests: [],
     },
   },
   crossOriginEmbedderPolicy: false,
 }));
+
+// Adicionar header para upgrade automático de HTTP para HTTPS
+app.use((req, res, next) => {
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Content-Security-Policy', "upgrade-insecure-requests");
+  next();
+});
 
 // CORS configurado adequadamente
 app.use(cors({
