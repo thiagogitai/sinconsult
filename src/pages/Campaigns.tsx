@@ -155,7 +155,12 @@ const Campaigns: React.FC = () => {
         schedule: '',
         use_tts: false,
         tts_config_id: '',
-        tts_audio_file: ''
+        tts_audio_file: '',
+        channel: 'whatsapp',
+        sms_config_id: '',
+        email_config_id: '',
+        email_subject: '',
+        email_template_id: ''
       });
       fetchCampaigns();
     } catch (error) {
@@ -168,13 +173,18 @@ const Campaigns: React.FC = () => {
     setEditingCampaign(campaign);
     setFormData({
       name: campaign.name,
-      message: campaign.message,
-      type: campaign.type,
+      message: campaign.message || campaign.message_template || '',
+      type: campaign.type || campaign.message_type || 'text',
       segment_id: campaign.segment_id || '',
-      schedule: campaign.scheduled_time || '',
+      schedule: campaign.scheduled_time || campaign.schedule_time || '',
       use_tts: campaign.use_tts || false,
       tts_config_id: campaign.tts_config_id || '',
-      tts_audio_file: campaign.tts_audio_file || ''
+      tts_audio_file: campaign.tts_audio_file || '',
+      channel: campaign.channel || 'whatsapp',
+      sms_config_id: campaign.sms_config_id || '',
+      email_config_id: campaign.email_config_id || '',
+      email_subject: campaign.email_subject || '',
+      email_template_id: campaign.email_template_id || ''
     });
     setShowModal(true);
   };
@@ -205,7 +215,12 @@ const Campaigns: React.FC = () => {
         schedule: '',
         use_tts: false,
         tts_config_id: '',
-        tts_audio_file: ''
+        tts_audio_file: '',
+        channel: 'whatsapp',
+        sms_config_id: '',
+        email_config_id: '',
+        email_subject: '',
+        email_template_id: ''
       });
       fetchCampaigns();
     } catch (error) {
