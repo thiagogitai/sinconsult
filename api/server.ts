@@ -852,12 +852,51 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
 // Criar campanha (requer autenticação)
 app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), asyncHandler(async (req, res) => {
   try {
-    const { name, message_template, message_type, schedule_time, use_tts, tts_config_id, tts_audio_file } = req.body;
+    const { 
+      name, 
+      message_template, 
+      message_type, 
+      schedule_time, 
+      use_tts, 
+      tts_config_id, 
+      tts_audio_file,
+      channel,
+      sms_config_id,
+      email_config_id,
+      email_subject,
+      email_template_id
+    } = req.body;
     
     const result = await dbRun(`
-      INSERT INTO campaigns (name, message, message_type, scheduled_at, use_tts, tts_config_id, tts_audio_file)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [name, message_template, message_type, schedule_time, use_tts || false, tts_config_id || null, tts_audio_file || null]);
+      INSERT INTO campaigns (
+        name, 
+        message, 
+        message_type, 
+        scheduled_at, 
+        use_tts, 
+        tts_config_id, 
+        tts_audio_file,
+        channel,
+        sms_config_id,
+        email_config_id,
+        email_subject,
+        email_template_id
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      name, 
+      message_template, 
+      message_type || 'text', 
+      schedule_time, 
+      use_tts || false, 
+      tts_config_id || null, 
+      tts_audio_file || null,
+      channel || 'whatsapp',
+      sms_config_id || null,
+      email_config_id || null,
+      email_subject || null,
+      email_template_id || null
+    ]);
     
     const newCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
     res.json(newCampaign);
