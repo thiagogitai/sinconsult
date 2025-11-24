@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Volume2, Settings, Play, Save, Globe, User } from 'lucide-react';
 
 const TTS: React.FC = () => {
-  const [selectedProvider, setSelectedProvider] = useState('openai');
-  const [selectedVoice, setSelectedVoice] = useState('alloy');
+  const [selectedProvider, setSelectedProvider] = useState('elevenlabs');
+  const [selectedVoice, setSelectedVoice] = useState('ErXwobaYiN1PccRqvHdJ1B'); // Antoni - Homem 30-40 anos (padrão)
+  const [voiceFilter, setVoiceFilter] = useState<string>('all'); // 'all', 'masculino', 'feminino', '30-40', '50+', '40-50'
   const [speed, setSpeed] = useState(1.0);
   const [pitch, setPitch] = useState(1.0);
   const [volume, setVolume] = useState(1.0);
@@ -51,12 +52,20 @@ const TTS: React.FC = () => {
 
   const fetchVoices = async (provider: string) => {
     try {
-      const response = await fetch(`http://localhost:3020/api/tts/voices/${provider}`);
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/tts/voices/${provider}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
-        setVoices(data.voices);
-        if (data.voices.length > 0) {
-          setSelectedVoice(data.voices[0].id);
+        setVoices(data.voices || []);
+        if (data.voices && data.voices.length > 0) {
+          // Selecionar voz padrão (Antoni - Homem 30-40) se disponível
+          const defaultVoice = data.voices.find((v: any) => v.id === 'ErXwobaYiN1PccRqvHdJ1B') || data.voices[0];
+          setSelectedVoice(defaultVoice.id);
         }
       }
     } catch (error) {
@@ -70,7 +79,10 @@ const TTS: React.FC = () => {
           { id: 'shimmer', name: 'Shimmer - Feminino', language: 'pt-BR' }
         ],
         elevenlabs: [
-          { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel - Feminino', language: 'pt-BR' }
+          { id: 'ErXwobaYiN1PccRqvHdJ1B', name: 'Antoni - Homem 30-40 anos', gender: 'masculino', age: '30-40', language: 'pt-BR' },
+          { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold - Homem 50+ anos', gender: 'masculino', age: '50+', language: 'pt-BR' },
+          { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella - Mulher 30-40 anos', gender: 'feminino', age: '30-40', language: 'pt-BR' },
+          { id: 'flq6f7yk4E4fJM5XTYuZ', name: 'Grace - Mulher 40-50 anos', gender: 'feminino', age: '40-50', language: 'pt-BR' }
         ]
       };
       setVoices(defaultVoices[provider as keyof typeof defaultVoices] || []);
@@ -79,7 +91,13 @@ const TTS: React.FC = () => {
 
   const fetchRecentFiles = async () => {
     try {
-      const response = await fetch('http://localhost:3020/api/tts/files');
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/tts/files`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setRecentFiles(data.files || []);
@@ -227,18 +245,49 @@ const TTS: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Voz</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Filtrar Vozes</label>
+              <select
+                value={voiceFilter}
+                onChange={(e) => setVoiceFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-2"
+              >
+                <option value="all">Todas as vozes</option>
+                <option value="masculino">Homens</option>
+                <option value="feminino">Mulheres</option>
+                <option value="30-40">30-40 anos</option>
+                <option value="40-50">40-50 anos</option>
+                <option value="50+">50+ anos</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Voz Português Brasil</label>
               <select
                 value={selectedVoice}
                 onChange={(e) => setSelectedVoice(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               >
-                {voices.map(voice => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name} ({voice.language})
-                  </option>
-                ))}
+                {voices
+                  .filter(voice => {
+                    if (voiceFilter === 'all') return true;
+                    if (voiceFilter === 'masculino') return voice.gender === 'masculino';
+                    if (voiceFilter === 'feminino') return voice.gender === 'feminino';
+                    if (voiceFilter === '30-40') return voice.age === '30-40';
+                    if (voiceFilter === '40-50') return voice.age === '40-50';
+                    if (voiceFilter === '50+') return voice.age === '50+';
+                    return true;
+                  })
+                  .map(voice => (
+                    <option key={voice.id} value={voice.id}>
+                      {voice.name} {voice.description ? `- ${voice.description}` : ''}
+                    </option>
+                  ))}
               </select>
+              {voices.find(v => v.id === selectedVoice)?.description && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {voices.find(v => v.id === selectedVoice)?.description}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-4">
