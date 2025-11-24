@@ -43,15 +43,35 @@ export default function WhatsAppInstances() {
   const fetchInstances = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/whatsapp/instances');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para visualizar instâncias WhatsApp',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const response = await fetch('/api/whatsapp/instances', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await response.json();
       
       if (response.ok) {
         setInstances(data);
+      } else if (response.status === 401) {
+        toast({
+          title: 'Erro de Autenticação',
+          description: data.message || 'Token de autenticação não fornecido',
+          variant: 'destructive'
+        });
       } else {
         toast({
           title: 'Erro',
-          description: 'Erro ao buscar instâncias WhatsApp',
+          description: data.message || 'Erro ao buscar instâncias WhatsApp',
           variant: 'destructive'
         });
       }
@@ -80,10 +100,21 @@ export default function WhatsAppInstances() {
 
     try {
       setCreating(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para criar instâncias WhatsApp',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const response = await fetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           name: newInstanceName.trim(),
@@ -107,10 +138,16 @@ export default function WhatsAppInstances() {
           setSelectedInstance(data.instance);
           setQrModalOpen(true);
         }
+      } else if (response.status === 401) {
+        toast({
+          title: 'Erro de Autenticação',
+          description: data.message || 'Token de autenticação não fornecido',
+          variant: 'destructive'
+        });
       } else {
         toast({
           title: 'Erro',
-          description: data.error || 'Erro ao criar instância',
+          description: data.message || data.error || 'Erro ao criar instância',
           variant: 'destructive'
         });
       }
@@ -129,12 +166,32 @@ export default function WhatsAppInstances() {
   // Obter QR Code
   const getQRCode = async (instance: WhatsAppInstance) => {
     try {
-      const response = await fetch(`/api/whatsapp/instances/${instance.name}/qrcode`);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para obter QR Code',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const response = await fetch(`/api/whatsapp/instances/${instance.name}/qrcode`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await response.json();
 
       if (response.ok) {
         setSelectedInstance({...instance, qrcode: data.qrcode});
         setQrModalOpen(true);
+      } else if (response.status === 401) {
+        toast({
+          title: 'Erro de Autenticação',
+          description: data.message || 'Token de autenticação não fornecido',
+          variant: 'destructive'
+        });
       } else {
         toast({
           title: 'Erro',
@@ -159,8 +216,21 @@ export default function WhatsAppInstances() {
     }
 
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para deletar instâncias',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const response = await fetch(`/api/whatsapp/instances/${instance.name}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       if (response.ok) {
@@ -169,10 +239,18 @@ export default function WhatsAppInstances() {
           description: 'Instância deletada com sucesso!'
         });
         fetchInstances();
+      } else if (response.status === 401) {
+        const data = await response.json();
+        toast({
+          title: 'Erro de Autenticação',
+          description: data.message || 'Token de autenticação não fornecido',
+          variant: 'destructive'
+        });
       } else {
+        const data = await response.json();
         toast({
           title: 'Erro',
-          description: 'Erro ao deletar instância',
+          description: data.message || 'Erro ao deletar instância',
           variant: 'destructive'
         });
       }
