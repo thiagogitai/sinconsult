@@ -21,7 +21,11 @@ export const validate = (schema: z.ZodSchema) => {
           message: err.message
         }));
         
-        throw new AppError('Dados inválidos', 400, 'VALIDATION_ERROR');
+        const errorMessage = errors.length > 0 
+          ? errors.map(e => `${e.field}: ${e.message}`).join(', ')
+          : 'Dados inválidos';
+        
+        throw new AppError(errorMessage, 400, 'VALIDATION_ERROR');
       }
       next(error);
     }
