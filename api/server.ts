@@ -396,11 +396,16 @@ function createTables() {
       });
       
       // Adicionar colunas se não existirem (migration)
+      // SQLite não permite ADD COLUMN IF NOT EXISTS, então ignoramos erros
       db.run(`ALTER TABLE campaigns ADD COLUMN channel TEXT DEFAULT 'whatsapp'`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN sms_config_id INTEGER`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN sms_template_id INTEGER`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN email_config_id INTEGER`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN email_subject TEXT`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN email_template_id INTEGER`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN use_tts BOOLEAN DEFAULT 0`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN tts_config_id TEXT`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN tts_audio_file TEXT`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN email_template_id INTEGER`, () => {});
 
       // Tabela de mensagens
@@ -4876,9 +4881,45 @@ initializeSQLite().then(() => {
     } catch (error) {
       logger.error('Erro no agendamento:', { error });
     }
-    });
+  });
   });
 }).catch(error => {
   logger.error('Erro ao inicializar SQLite:', { error });
   process.exit(1);
 });
+
+// Executar processamento de campanhas agendadas imediatamente (requer autenticação)
+app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    await loadEvolutionConfigFromDB();
+    const campaigns: any[] = await dbAll(`
+      SELECT 
+        c.id,
+        c.name,
+        c.status,
+        c.message as message_template,
+        c.message_type,
+        c.media_url,
+        c.target_segment,
+        GROUP_CONCAT(co.id) as contact_ids
+      FROM campaigns c
+      LEFT JOIN contacts co ON (c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
+      WHERE c.status = 'scheduled' 
+        AND c.scheduled_at <= datetime('now')
+      GROUP BY c.id
+    `);
+
+    const results: any[] = [];
+    for (const campaign of campaigns) {
+      await dbRun(`UPDATE campaigns SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [campaign.id]);
+      const contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
+      await processCampaignWithQueue(campaign, contactIds);
+      results.push({ id: campaign.id, name: campaign.name });
+    }
+
+    res.json({ success: true, processed: results.length, campaigns: results });
+  } catch (error: any) {
+    logger.error('Erro ao executar processamento imediato:', { error: error.message });
+    res.status(500).json({ success: false, error: 'Erro ao processar campanhas', details: error.message });
+  }
+}));
