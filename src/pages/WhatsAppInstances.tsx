@@ -230,9 +230,11 @@ export default function WhatsAppInstances() {
     const connectingInstances = instances.filter(i => i.status === 'connecting');
     if (connectingInstances.length === 0) return;
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       // Verificar status de cada instância conectando
-      connectingInstances.forEach(async (instance) => {
+      let statusChanged = false;
+      
+      for (const instance of connectingInstances) {
         try {
           const token = localStorage.getItem('token');
           const apiBase = import.meta.env.VITE_API_URL || '/api';
@@ -243,15 +245,20 @@ export default function WhatsAppInstances() {
           });
           if (response.ok) {
             const data = await response.json();
-            // Se mudou para connected, atualizar lista
-            if (data.status === 'connected') {
-              fetchInstances();
+            // Se mudou para connected, marcar para atualizar lista
+            if (data.status === 'connected' && instance.status !== 'connected') {
+              statusChanged = true;
             }
           }
         } catch (error) {
           console.error('Erro ao verificar status:', error);
         }
-      });
+      }
+      
+      // Atualizar lista se algum status mudou
+      if (statusChanged) {
+        fetchInstances();
+      }
     }, 5000); // Verificar a cada 5 segundos quando está conectando
 
     return () => clearInterval(interval);

@@ -117,9 +117,10 @@ const Contacts: React.FC = () => {
         setFormData({ name: '', phone: '', email: '', tags: '' });
         fetchContacts();
       } else {
+        const errorMessage = data.error || data.message || 'Erro ao criar contato';
         toast({
           title: 'Erro',
-          description: data.message || 'Erro ao criar contato',
+          description: errorMessage,
           variant: 'destructive'
         });
       }

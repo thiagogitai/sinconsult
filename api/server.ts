@@ -3291,10 +3291,14 @@ app.post('/api/whatsapp/test-open', asyncHandler(async (req, res) => {
 // Listar instâncias (requer autenticação)
 app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const instances = await dbAll(`
+    // Carregar configurações do Evolution antes de verificar
+    await loadEvolutionConfigFromDB();
+    
+    let instances = await dbAll(`
       SELECT 
         id,
         name as instance_name,
+        instance_id,
         phone_connected as phone_number,
         status,
         qrcode,
@@ -3305,6 +3309,41 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
       WHERE is_active = 1
       ORDER BY created_at DESC
     `);
+    
+    // Verificar status na Evolution API para instâncias que estão "connecting"
+    for (const instance of instances) {
+      if (instance.status === 'connecting' && instance.instance_id) {
+        try {
+          const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instance.instance_id || instance.instance_name);
+          const state = evolutionStatus.state || evolutionStatus.status || '';
+          const stateStr = String(state).toLowerCase();
+          
+          let mappedStatus = instance.status;
+          if (stateStr === 'open') {
+            mappedStatus = 'connected';
+          } else if (stateStr === 'close' || stateStr === 'closed') {
+            mappedStatus = 'disconnected';
+          }
+          
+          // Se o status mudou, atualizar no banco
+          if (mappedStatus !== instance.status) {
+            const phoneConnected = evolutionStatus.phoneConnected || evolutionStatus.phoneNumber || evolutionStatus.phone || instance.phone_number;
+            await dbRun(`
+              UPDATE whatsapp_instances 
+              SET status = ?, phone_connected = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [mappedStatus, phoneConnected, instance.id]);
+            
+            // Atualizar na lista de retorno
+            instance.status = mappedStatus;
+            instance.phone_number = phoneConnected;
+          }
+        } catch (error: any) {
+          // Ignorar erros ao verificar status individual
+          logger.debug('Erro ao verificar status individual:', { error: error.message, instance: instance.instance_name });
+        }
+      }
+    }
     
     res.json(instances);
   } catch (error) {
