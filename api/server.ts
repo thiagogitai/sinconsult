@@ -1690,9 +1690,32 @@ app.post('/api/upload/video', authenticateToken, uploadVideo.single('video'), as
 }));
 
 // Upload de mídia genérica (imagem ou vídeo) para campanhas (requer autenticação)
-app.post('/api/upload/media', authenticateToken, uploadMedia.single('media'), asyncHandler(async (req, res) => {
+app.post('/api/upload/media', authenticateToken, (req, res, next) => {
+  logger.info('Upload de mídia iniciado', { 
+    contentType: req.headers['content-type'],
+    hasFile: !!req.file 
+  });
+  
+  uploadMedia.single('media')(req, res, (err: any) => {
+    if (err) {
+      logger.error('Erro no multer:', { error: err.message });
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'Erro ao processar arquivo'
+      });
+    }
+    next();
+  });
+}, asyncHandler(async (req, res) => {
   try {
+    logger.info('Processando upload de mídia', { 
+      hasFile: !!req.file,
+      filename: req.file?.filename,
+      size: req.file?.size 
+    });
+    
     if (!req.file) {
+      logger.warn('Upload de mídia sem arquivo');
       return res.status(400).json({
         success: false,
         error: 'Nenhum arquivo enviado'
@@ -1701,6 +1724,8 @@ app.post('/api/upload/media', authenticateToken, uploadMedia.single('media'), as
     
     // Retornar URL da mídia
     const mediaUrl = `/uploads/${req.file.filename}`;
+    
+    logger.info('Upload de mídia concluído com sucesso', { url: mediaUrl });
     
     res.json({
       success: true,
@@ -1711,14 +1736,18 @@ app.post('/api/upload/media', authenticateToken, uploadMedia.single('media'), as
       type: req.file.mimetype.startsWith('image/') ? 'image' : 'video'
     });
   } catch (error: any) {
-    logger.error('Erro ao fazer upload de mídia:', { error });
-    if (error.message) {
-      return res.status(400).json({
+    logger.error('Erro ao fazer upload de mídia:', { 
+      error: error.message,
+      stack: error.stack 
+    });
+    
+    // Garantir que sempre retorna JSON
+    if (!res.headersSent) {
+      res.status(500).json({
         success: false,
-        error: error.message
+        error: error.message || 'Erro ao fazer upload de mídia'
       });
     }
-    throw error;
   }
 }));
 

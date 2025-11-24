@@ -154,6 +154,10 @@ const Campaigns: React.FC = () => {
       formDataUpload.append('media', file);
       
       const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Token de autenticação não encontrado. Faça login novamente.');
+      }
+      
       const response = await fetch('/api/upload/media', {
         method: 'POST',
         headers: {
@@ -162,6 +166,21 @@ const Campaigns: React.FC = () => {
         body: formDataUpload
       });
       
+      // Verificar se a resposta é JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Resposta não é JSON:', text.substring(0, 200));
+        
+        if (response.status === 401) {
+          throw new Error('Sessão expirada. Faça login novamente.');
+        } else if (response.status === 404) {
+          throw new Error('Rota não encontrada. Verifique se o servidor está configurado corretamente.');
+        } else {
+          throw new Error(`Erro no servidor (${response.status}): ${text.substring(0, 100)}`);
+        }
+      }
+      
       const data = await response.json();
       
       if (response.ok && data.success) {
@@ -169,11 +188,19 @@ const Campaigns: React.FC = () => {
         setMediaPreview(data.url);
         return data.url;
       } else {
-        throw new Error(data.error || 'Erro ao fazer upload');
+        throw new Error(data.error || data.message || 'Erro ao fazer upload');
       }
     } catch (error: any) {
       console.error('Erro ao fazer upload:', error);
-      alert('Erro ao fazer upload: ' + (error.message || 'Erro desconhecido'));
+      
+      let errorMessage = 'Erro ao fazer upload';
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error instanceof TypeError && error.message.includes('JSON')) {
+        errorMessage = 'Erro ao processar resposta do servidor. Verifique se o servidor está funcionando.';
+      }
+      
+      alert(errorMessage);
       throw error;
     } finally {
       setUploadingMedia(false);
