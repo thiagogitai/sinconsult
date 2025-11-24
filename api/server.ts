@@ -3629,6 +3629,9 @@ app.get('/api/whatsapp/instances/:id/status', authenticateToken, asyncHandler(as
   try {
     const { id } = req.params;
     
+    // Carregar configurações do Evolution antes de verificar
+    await loadEvolutionConfigFromDB();
+    
     // Buscar instância no banco
     const instance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [id]);
     if (!instance) {
@@ -3636,23 +3639,58 @@ app.get('/api/whatsapp/instances/:id/status', authenticateToken, asyncHandler(as
     }
     
     // Obter status da Evolution API
-    const status = await evolutionAPI.getInstanceStatus(instance.instance_id);
-    
-    // Atualizar status no banco se mudou
-    if (status.status !== instance.status) {
-      await dbRun(`
-        UPDATE whatsapp_instances 
-        SET status = ?, phone_connected = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `, [status.status, status.phoneConnected || instance.phone_connected, id]);
+    try {
+      const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instance.instance_id || instance.name);
+      
+      // Evolution API v2 retorna 'state' com valores: 'open', 'close', 'connecting'
+      // Priorizar 'state' sobre 'status' pois é o campo principal da Evolution API v2
+      const state = evolutionStatus.state || evolutionStatus.status || '';
+      const stateStr = String(state).toLowerCase();
+      
+      // Mapear status da Evolution API para nosso formato
+      let mappedStatus: string = instance.status; // Manter status atual por padrão
+      
+      if (stateStr === 'open') {
+        mappedStatus = 'connected';
+      } else if (stateStr === 'close' || stateStr === 'closed') {
+        mappedStatus = 'disconnected';
+      } else if (stateStr === 'connecting' || stateStr === 'connect') {
+        mappedStatus = 'connecting';
+      } else if (stateStr === 'connected') {
+        mappedStatus = 'connected';
+      } else if (stateStr === 'disconnected') {
+        mappedStatus = 'disconnected';
+      }
+      
+      // Atualizar status no banco se mudou
+      if (mappedStatus !== instance.status) {
+        const phoneConnected = evolutionStatus.phoneConnected || evolutionStatus.phoneNumber || evolutionStatus.phone || instance.phone_connected;
+        await dbRun(`
+          UPDATE whatsapp_instances 
+          SET status = ?, phone_connected = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `, [mappedStatus, phoneConnected, id]);
+        
+        logger.info(`Status da instância ${instance.name} atualizado: ${instance.status} -> ${mappedStatus} (Evolution state: ${stateStr})`);
+        
+        // Buscar instância atualizada
+        const updatedInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [id]);
+        return res.json({
+          ...updatedInstance,
+          evolution_status: evolutionStatus
+        });
+      }
+      
+      return res.json({
+        ...instance,
+        status: mappedStatus,
+        evolution_status: evolutionStatus
+      });
+    } catch (error: any) {
+      // Se houver erro ao verificar na Evolution API, retornar status do banco
+      logger.warn('Erro ao verificar status na Evolution API:', { error: error.message, instance: instance.name });
+      return res.json(instance);
     }
-    
-    res.json({
-      ...instance,
-      status: status.status,
-      phone_connected: status.phoneConnected || instance.phone_connected,
-      qrcode_url: instance.qrcode ? `data:image/png;base64,${instance.qrcode}` : null
-    });
   } catch (error) {
     logger.error('Erro ao obter status da instância:', { error });
     throw error;

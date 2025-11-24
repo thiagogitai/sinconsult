@@ -46,7 +46,12 @@ export const schemas = {
       name: z.string().min(1, 'Nome é obrigatório'),
       phone: z.string().min(10, 'Telefone inválido'),
       email: z.string().email('Email inválido').optional().or(z.literal('')),
-      tags: z.string().optional(),
+      tags: z.union([z.string(), z.array(z.string())]).optional().transform((val) => {
+        if (Array.isArray(val)) {
+          return val.join(',');
+        }
+        return val || '';
+      }),
       custom_fields: z.record(z.any()).optional()
     })
   }),

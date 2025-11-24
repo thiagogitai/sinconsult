@@ -225,6 +225,38 @@ export default function WhatsAppInstances() {
     return () => clearInterval(interval);
   }, []);
 
+  // Verificar status mais frequentemente quando há instâncias conectando
+  useEffect(() => {
+    const connectingInstances = instances.filter(i => i.status === 'connecting');
+    if (connectingInstances.length === 0) return;
+
+    const interval = setInterval(() => {
+      // Verificar status de cada instância conectando
+      connectingInstances.forEach(async (instance) => {
+        try {
+          const token = localStorage.getItem('token');
+          const apiBase = import.meta.env.VITE_API_URL || '/api';
+          const response = await fetch(`${apiBase}/whatsapp/instances/${instance.id}/status`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            // Se mudou para connected, atualizar lista
+            if (data.status === 'connected') {
+              fetchInstances();
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao verificar status:', error);
+        }
+      });
+    }, 5000); // Verificar a cada 5 segundos quando está conectando
+
+    return () => clearInterval(interval);
+  }, [instances]);
+
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'connected':
