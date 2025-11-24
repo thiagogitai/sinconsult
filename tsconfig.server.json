@@ -16,7 +16,7 @@
     "noEmit": false
   },
   "include": [
-    "api/**/*"
+    "api/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -7,7 +7,7 @@
     "client:dev": "vite",
     "build": "tsc -b && vite build",
     "build:frontend": "vite build",
-    "build:server": "tsc --project tsconfig.server.json",
+    "build:server": "tsc --project tsconfig.server.json && find dist-server -name '*.ts' -delete",
     "build:production": "npm run build && npm run build:server",
     "start": "node dist-server/api/server.js",
     "start:ts": "tsx api/server.ts",
