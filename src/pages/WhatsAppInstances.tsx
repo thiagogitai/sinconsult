@@ -141,7 +141,9 @@ export default function WhatsAppInstances() {
     try {
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
-      const response = await fetch(`${apiBase}/whatsapp/instances/${instance.name}/qrcode`, {
+      const instanceId = instance.id || instance.instance_name;
+      const response = await fetch(`${apiBase}/whatsapp/instances/${instanceId}/connect`, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
         }
