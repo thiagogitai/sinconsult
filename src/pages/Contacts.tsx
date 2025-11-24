@@ -48,27 +48,8 @@ const Contacts: React.FC = () => {
       }
     } catch (error) {
       console.error('Erro ao carregar contatos:', error);
-      // Dados mockados para demonstração
-      setContacts([
-        {
-          id: 1,
-          name: 'João Silva',
-          phone: '+55 11 98765-4321',
-          email: 'joao@example.com',
-          tags: ['cliente', 'vip'],
-          status: 'active',
-          created_at: '2024-01-15'
-        },
-        {
-          id: 2,
-          name: 'Maria Santos',
-          phone: '+55 21 99876-5432',
-          email: 'maria@example.com',
-          tags: ['prospect'],
-          status: 'active',
-          created_at: '2024-01-16'
-        }
-      ]);
+      toast({ title: 'Erro', description: 'Erro ao carregar contatos', variant: 'destructive' });
+      setContacts([]);
     } finally {
       setLoading(false);
     }

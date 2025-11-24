@@ -2255,17 +2255,36 @@ app.get('/api/tts/configs', authenticateToken, asyncHandler(async (req, res) => 
 // Métricas TTS (requer autenticação)
 app.get('/api/tts/metrics', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    // SQLite não tem tabela tts_metrics, retornar dados mockados por enquanto
+    // Buscar métricas reais da tabela tts_files
+    const stats = await dbGet(`
+      SELECT 
+        COUNT(*) as total_audio_generated,
+        COALESCE(SUM(LENGTH(original_text)), 0) as total_characters,
+        COALESCE(AVG(duration_seconds), 0) as average_duration,
+        COUNT(CASE WHEN access_count > 1 THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0) as cache_hit_rate
+      FROM tts_files
+    `);
+    
+    // Calcular custo estimado (aproximação: $0.00004 por caractere para ElevenLabs)
+    const estimatedCost = (stats?.total_characters || 0) * 0.00004;
+    
     res.json({
-      total_requests: 0,
-      total_characters: 0,
-      total_duration: 0,
-      total_cost_cents: 0,
-      cache_hit_rate: 0
+      total_audio_generated: stats?.total_audio_generated || 0,
+      total_characters: stats?.total_characters || 0,
+      estimated_cost: estimatedCost,
+      cache_hit_rate: Math.round(stats?.cache_hit_rate || 0),
+      average_duration: stats?.average_duration || 0
     });
   } catch (error) {
     logger.error('Erro ao buscar métricas TTS:', { error });
-    throw error;
+    // Retornar zeros em caso de erro
+    res.json({
+      total_audio_generated: 0,
+      total_characters: 0,
+      estimated_cost: 0,
+      cache_hit_rate: 0,
+      average_duration: 0
+    });
   }
 }));
 

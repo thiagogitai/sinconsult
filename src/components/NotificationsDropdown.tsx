@@ -41,35 +41,9 @@ const NotificationsDropdown: React.FC = () => {
       }
     } catch (error) {
       console.error('Erro ao buscar notificações:', error);
-      // Usar notificações mockadas se a API falhar
-      const mockNotifications: Notification[] = [
-        {
-          id: '1',
-          type: 'success',
-          title: 'Campanha concluída',
-          message: 'Campanha "Promoção de Verão" foi concluída com sucesso',
-          read: false,
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '2',
-          type: 'info',
-          title: 'Nova mensagem recebida',
-          message: 'Você recebeu uma nova mensagem de João Silva',
-          read: false,
-          createdAt: new Date(Date.now() - 3600000).toISOString()
-        },
-        {
-          id: '3',
-          type: 'warning',
-          title: 'Instância desconectada',
-          message: 'A instância WhatsApp "Principal" foi desconectada',
-          read: true,
-          createdAt: new Date(Date.now() - 7200000).toISOString()
-        }
-      ];
-      setNotifications(mockNotifications);
-      setUnreadCount(mockNotifications.filter(n => !n.read).length);
+      // Em caso de erro, manter arrays vazios
+      setNotifications([]);
+      setUnreadCount(0);
     }
   };
 

@@ -12,6 +12,14 @@ const TTS: React.FC = () => {
   const [voices, setVoices] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [recentFiles, setRecentFiles] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState({
+    totalAudioGenerated: 0,
+    totalCharacters: 0,
+    estimatedCost: 0,
+    cacheHitRate: 0,
+    averageDuration: 0
+  });
+  const [loadingMetrics, setLoadingMetrics] = useState(true);
 
   const providers = [
     { id: 'openai', name: 'OpenAI TTS', status: 'active' },
@@ -20,14 +28,6 @@ const TTS: React.FC = () => {
     { id: 'aws', name: 'Amazon Polly', status: 'inactive' },
     { id: 'azure', name: 'Microsoft Azure', status: 'inactive' }
   ];
-
-  const metrics = {
-    totalAudioGenerated: 2847,
-    totalCharacters: 156420,
-    estimatedCost: 7.82,
-    cacheHitRate: 73,
-    averageDuration: 8.5
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -48,7 +48,36 @@ const TTS: React.FC = () => {
   // Buscar arquivos recentes
   useEffect(() => {
     fetchRecentFiles();
+    fetchMetrics();
   }, []);
+
+  const fetchMetrics = async () => {
+    try {
+      setLoadingMetrics(true);
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/tts/metrics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMetrics({
+          totalAudioGenerated: data.total_audio_generated || 0,
+          totalCharacters: data.total_characters || 0,
+          estimatedCost: data.estimated_cost || 0,
+          cacheHitRate: data.cache_hit_rate || 0,
+          averageDuration: data.average_duration || 0
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao buscar métricas TTS:', error);
+      // Manter valores em 0 se houver erro
+    } finally {
+      setLoadingMetrics(false);
+    }
+  };
 
   const fetchVoices = async (provider: string) => {
     try {
@@ -173,10 +202,14 @@ const TTS: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Áudios Gerados</p>
-              <p className="text-2xl font-bold text-gray-900">{metrics.totalAudioGenerated}</p>
+              {loadingMetrics ? (
+                <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-900">{metrics.totalAudioGenerated}</p>
+              )}
             </div>
-            <div className="bg-gray-100 p-3 rounded-lg">
-              <Volume2 className="h-6 w-6 text-gray-700" />
+            <div className="bg-gray-800 p-3 rounded-lg">
+              <Volume2 className="h-6 w-6 text-white" />
             </div>
           </div>
         </div>
@@ -184,10 +217,14 @@ const TTS: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Caracteres</p>
-              <p className="text-2xl font-bold text-gray-900">{metrics.totalCharacters.toLocaleString()}</p>
+              {loadingMetrics ? (
+                <div className="h-8 w-24 bg-gray-200 rounded animate-pulse"></div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-900">{metrics.totalCharacters.toLocaleString()}</p>
+              )}
             </div>
-            <div className="bg-green-100 p-3 rounded-lg">
-              <Globe className="h-6 w-6 text-green-600" />
+            <div className="bg-gray-800 p-3 rounded-lg">
+              <Globe className="h-6 w-6 text-white" />
             </div>
           </div>
         </div>
@@ -195,10 +232,14 @@ const TTS: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Custo Estimado</p>
-              <p className="text-2xl font-bold text-gray-900">${metrics.estimatedCost}</p>
+              {loadingMetrics ? (
+                <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-900">${metrics.estimatedCost.toFixed(2)}</p>
+              )}
             </div>
-            <div className="bg-yellow-100 p-3 rounded-lg">
-              <Settings className="h-6 w-6 text-yellow-600" />
+            <div className="bg-gray-800 p-3 rounded-lg">
+              <Settings className="h-6 w-6 text-white" />
             </div>
           </div>
         </div>
@@ -206,10 +247,14 @@ const TTS: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Cache Hit Rate</p>
-              <p className="text-2xl font-bold text-gray-900">{metrics.cacheHitRate}%</p>
+              {loadingMetrics ? (
+                <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-900">{metrics.cacheHitRate}%</p>
+              )}
             </div>
-            <div className="bg-gray-100 p-3 rounded-lg">
-              <Save className="h-6 w-6 text-gray-700" />
+            <div className="bg-gray-800 p-3 rounded-lg">
+              <Save className="h-6 w-6 text-white" />
             </div>
           </div>
         </div>
@@ -217,10 +262,14 @@ const TTS: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Duração Média</p>
-              <p className="text-2xl font-bold text-gray-900">{metrics.averageDuration}s</p>
+              {loadingMetrics ? (
+                <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-900">{metrics.averageDuration.toFixed(1)}s</p>
+              )}
             </div>
-            <div className="bg-red-100 p-3 rounded-lg">
-              <Play className="h-6 w-6 text-red-600" />
+            <div className="bg-gray-800 p-3 rounded-lg">
+              <Play className="h-6 w-6 text-white" />
             </div>
           </div>
         </div>
