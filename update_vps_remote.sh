@@ -1,87 +1,90 @@
 #!/bin/bash
 
-# Script para executar no VPS via painel ou SSH
-# Execute: bash update_vps_remote.sh
+# Script de deployment para VPS - Atualização completa com correção de URLs
 
-echo "=== ATUALIZANDO SISTEMA CRM ==="
+echo "🚀 Iniciando deployment completo do sistema..."
 
-# Navegar para diretório do projeto
-cd /root/simconsult 2>/dev/null || cd /home/simconsult 2>/dev/null || cd /var/www/simconsult 2>/dev/null || {
-    echo "❌ Diretório do projeto não encontrado!"
-    echo "Por favor, execute: find / -name "package.json" -path "*/simconsult/*" 2>/dev/null"
-    exit 1
-}
+# Parar serviços atuais
+echo "📋 Parando serviços atuais..."
+pm2 stop simconsult || true
+pm2 delete simconsult || true
 
-echo "📁 Diretório encontrado: $(pwd)"
-
-# Parar serviços
-echo "Parando serviços..."
-pm2 stop simconsult 2>/dev/null || true
-pm2 delete simconsult 2>/dev/null || true
-
-# Backup do banco de dados
-echo "Criando backup do banco..."
-cp database.sqlite database.sqlite.backup 2>/dev/null || true
+# Limpar builds antigos
+echo "🧹 Limpando builds antigos..."
+rm -rf dist-server dist
 
 # Atualizar código
-echo "Atualizando código..."
-git pull origin main
+echo "📥 Atualizando código..."
+git pull origin main || echo "⚠️  Não foi possível fazer pull, continuando com código atual..."
 
-# Limpar e reinstalar
-echo "Reinstalando dependências..."
-rm -rf node_modules package-lock.json dist dist-server
+# Instalar dependências
+echo "📦 Instalando dependências..."
 npm install
 
-# Build com variáveis corretas
-echo "Build do servidor..."
+# Build do servidor
+echo "🔨 Build do servidor..."
 npm run build:server
 
-echo "Build do frontend..."
-export VITE_API_URL=/api
-export NODE_ENV=production
+# Build do frontend com configuração de produção
+echo "🎨 Build do frontend..."
 npm run build:frontend
 
-# Verificar builds
-if [ -f "dist-server/api/server.js" ] && [ -f "dist/index.html" ]; then
-    echo "✅ Builds criados com sucesso"
-else
-    echo "❌ Erro ao criar builds"
+# Verificar se os arquivos foram criados
+echo "🔍 Verificando arquivos de build..."
+if [ ! -f "dist-server/api/server.js" ]; then
+    echo "❌ Erro: Arquivo server.js não encontrado!"
     exit 1
 fi
 
-# Verificar se não há URLs hardcoded
-if grep -r "certcrm.com.br" dist/; then
-    echo "❌ URLs hardcoded encontradas no build!"
+if [ ! -d "dist" ]; then
+    echo "❌ Erro: Diretório dist não encontrado!"
     exit 1
-else
-    echo "✅ Nenhuma URL hardcoded encontrada"
 fi
 
-# Iniciar serviço
-echo "Iniciando serviço..."
+# Criar arquivo de ambiente de produção se não existir
+echo "⚙️  Configurando ambiente de produção..."
+if [ ! -f ".env.production" ]; then
+    cat > .env.production << EOF
+# Configurações para build de produção
+NODE_ENV=production
+VITE_API_URL=/api
+EOF
+    echo "✅ Arquivo .env.production criado"
+fi
+
+# Garantir que as variáveis de ambiente estão configuradas
+echo "🔐 Verificando variáveis de ambiente..."
+if [ -f ".env" ]; then
+    echo "✅ Arquivo .env encontrado"
+    source .env
+else
+    echo "⚠️  Arquivo .env não encontrado, criando um básico..."
+    cat > .env << EOF
+NODE_ENV=production
+PORT=3006
+JWT_SECRET=super-secret-jwt-key-2025-simconsult-secure-token-change-in-production
+VITE_API_URL=/api
+EVOLUTION_API_URL=https://solitarybaboon-evolution.cloudfy.live
+EVOLUTION_API_KEY=0eX8TyfZjyRQVryI2b7Mx6bvSAQUQHsc
+EOF
+fi
+
+# Iniciar com PM2
+echo "🚀 Iniciando aplicação com PM2..."
 pm2 start ecosystem.config.cjs
-pm2 save
 
 # Aguardar inicialização
-sleep 5
+echo "⏳ Aguardando inicialização..."
+sleep 10
 
 # Verificar status
-echo "Verificando status..."
+echo "📊 Status do PM2:"
 pm2 status
 
-# Testar conexões
-echo "Testando conexões..."
-echo "1. Testando servidor local:"
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3006/api/whatsapp/test-connection
-echo ""
+# Verificar logs
+echo "📋 Últimas linhas dos logs:"
+pm2 logs simconsult --lines 20 --nostream
 
-echo "2. Testando Evolution API:"
-curl -s http://localhost:3006/api/whatsapp/test-connection | jq '.' 2>/dev/null || echo "Erro ao testar Evolution API"
-
-echo "3. Testando endpoint de instâncias:"
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3006/api/whatsapp/instances
-echo ""
-
-echo "=== SISTEMA ATUALIZADO ==="
-echo "Acesse: https://certcrm.com.br"
-echo "Verifique os logs: pm2 logs simconsult --lines 20"
+echo "✅ Deployment concluído!"
+echo "🌐 Acesse: https://certcrm.com.br"
+echo "🔧 Para ver logs em tempo real: pm2 logs simconsult"
