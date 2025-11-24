@@ -94,7 +94,7 @@ export const campaignsAPI = {
   update: (id: string, campaign: any) =>
     api.put(`/campaigns/${id}`, campaign),
   delete: (id: string) =>
-    api.delete(`/campaigns/${id}`),
+    api.delete(`/campaigns/${id}`).then(res => res.data),
   start: (id: string) =>
     api.post(`/campaigns/${id}/start`),
   pause: (id: string) =>

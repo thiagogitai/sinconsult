@@ -43,17 +43,38 @@ const Schedules: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir este agendamento?')) {
+    if (!confirm('Tem certeza que deseja excluir este agendamento? Esta ação não pode ser desfeita.')) {
       return;
     }
 
     try {
-      await campaignsAPI.delete(id.toString());
-      toast({ title: 'Sucesso', description: 'Agendamento excluído com sucesso!' });
-      fetchSchedules();
-    } catch (error) {
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/campaigns/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        toast({ title: 'Sucesso', description: 'Agendamento excluído com sucesso!' });
+        fetchSchedules();
+      } else {
+        const data = await response.json();
+        toast({ 
+          title: 'Erro', 
+          description: data.message || data.error || 'Erro ao excluir agendamento', 
+          variant: 'destructive' 
+        });
+      }
+    } catch (error: any) {
       console.error('Erro ao excluir agendamento:', error);
-      toast({ title: 'Erro', description: 'Erro ao excluir agendamento', variant: 'destructive' });
+      toast({ 
+        title: 'Erro', 
+        description: error.message || 'Erro de conexão ao excluir agendamento', 
+        variant: 'destructive' 
+      });
     }
   };
 
