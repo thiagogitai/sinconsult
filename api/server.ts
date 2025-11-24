@@ -29,7 +29,31 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Carregar variáveis de ambiente
-dotenv.config();
+(() => {
+  const envCandidates = [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(__dirname, '../.env'),
+    path.resolve(__dirname, '../../.env')
+  ];
+  for (const candidate of envCandidates) {
+    if (fs.existsSync(candidate)) {
+      dotenv.config({ path: candidate });
+      break;
+    }
+  }
+})();
+
+async function loadEvolutionConfigFromDB() {
+  try {
+    const urlRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['evolutionApiUrl', 'api']);
+    const keyRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['evolutionApiKey', 'api']);
+    const url = (urlRow && urlRow.value) ? urlRow.value : process.env.EVOLUTION_API_URL;
+    const key = (keyRow && keyRow.value) ? keyRow.value : process.env.EVOLUTION_API_KEY;
+    if (url) process.env.EVOLUTION_API_URL = url;
+    if (key) process.env.EVOLUTION_API_KEY = key;
+    evolutionAPI.setConfig(url, key);
+  } catch {}
+}
 
 // Validar e gerar JWT_SECRET se necessário
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secret-jwt-key-change-this-in-production') {
@@ -148,6 +172,7 @@ async function initializeSQLite() {
 
     // Criar tabelas
     await createTables();
+    await loadEvolutionConfigFromDB();
     
     // Definir funções auxiliares após a inicialização do DB
     dbAll = (query: string, params: any[] = []): Promise<any[]> => {
@@ -3130,15 +3155,19 @@ app.get('/api/settings', authenticateToken, asyncHandler(async (req, res) => {
 // Salvar configurações (requer autenticação)
 app.post('/api/settings', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const settings = req.body;
-    
-    for (const [key, value] of Object.entries(settings)) {
-      await dbRun(`
-        INSERT OR REPLACE INTO app_settings (key, value, category, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
-      `, [key, String(value), 'general']);
+    const settings = req.body as any;
+    const category = (req.query.category as string) || settings.category || 'general';
+
+    for (const [key, val] of Object.entries(settings)) {
+      const value = String(val);
+      const cat = (key === 'evolutionApiUrl' || key === 'evolutionApiKey') ? 'api' : category;
+      await dbRun(
+        'INSERT OR REPLACE INTO app_settings (key, value, category, updated_at) VALUES (?, ?, ?, datetime(\'now\'))',
+        [key, value, cat]
+      );
     }
-    
+
+    await loadEvolutionConfigFromDB();
     res.json({ success: true, message: 'Configurações salvas com sucesso' });
   } catch (error) {
     logger.error('Erro ao salvar configurações:', { error });

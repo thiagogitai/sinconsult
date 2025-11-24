@@ -67,6 +67,15 @@ class EvolutionAPI {
     }
   }
 
+  setConfig(baseURL?: string, apiKey?: string) {
+    if (baseURL && baseURL.length > 0) {
+      this.baseURL = baseURL;
+    }
+    if (apiKey && apiKey.length > 0) {
+      this.apiKey = apiKey;
+    }
+  }
+
   // Configurar headers de autenticação
   private getHeaders() {
     const headers: Record<string, string> = {
