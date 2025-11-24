@@ -115,7 +115,7 @@ export default function WhatsAppInstances() {
         
         // Se tiver QR Code, mostrar modal
         if (data.qrcode) {
-          setSelectedInstance(data.instance);
+          setSelectedInstance(data as WhatsAppInstance);
           setQrModalOpen(true);
         }
       } else {
@@ -142,7 +142,7 @@ export default function WhatsAppInstances() {
     try {
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
-      const instanceId = instance.id || instance.instance_id || instance.name;
+      const instanceId = instance.id;
       const response = await fetch(`${apiBase}/whatsapp/instances/${instanceId}/connect`, {
         method: 'POST',
         headers: {
@@ -180,7 +180,7 @@ export default function WhatsAppInstances() {
     try {
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
-      const instanceId = instance.id || instance.instance_id || instance.name;
+      const instanceId = instance.id;
       const response = await fetch(`${apiBase}/whatsapp/instances/${instanceId}`, {
         method: 'DELETE',
         headers: {

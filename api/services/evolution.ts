@@ -140,18 +140,11 @@ class EvolutionAPI {
   // Criar nova instância WhatsApp
   async createInstance(instanceName: string, phoneNumber?: string): Promise<EvolutionInstance> {
     try {
+      // Evolution API v2 - endpoint correto e parâmetros
       const response = await axios.post(`${this.baseURL}/instance/create`, {
         instanceName: instanceName,
-        number: phoneNumber || '',
-        qrcode: true,
-        integration: 'WHATSAPP-BAILEYS',
-        rejectCall: true,
-        msgCall: 'Desculpe, não posso atender ligações. Envie uma mensagem!',
-        groupsIgnore: true,
-        alwaysOnline: false,
-        readMessages: true,
-        readStatus: true,
-        syncFullHistory: false,
+        integration: 'WHATSAPP-BAILEYS', // Integration type required for v2
+        number: phoneNumber || undefined
       }, {
         headers: this.getHeaders(),
       });
@@ -163,12 +156,11 @@ class EvolutionAPI {
   }
 
   // Conectar instância (gerar QR Code)
-  async connectInstance(instanceName: string): Promise<EvolutionInstance> {
+  async connectInstance(instanceName: string): Promise<{ base64?: string; code?: string; pairingCode?: string }> {
     try {
-      const response = await axios.post(`${this.baseURL}/instance/connect/${instanceName}`, {}, {
+      const response = await axios.get(`${this.baseURL}/instance/connect/${instanceName}`, {
         headers: this.getHeaders(),
       });
-
       return response.data;
     } catch (error: unknown) {
       this.handleError(error, 'Erro ao conectar instância WhatsApp');

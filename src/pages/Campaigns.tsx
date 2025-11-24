@@ -35,11 +35,13 @@ const Campaigns: React.FC = () => {
     tts_audio_file: '',
     channel: 'whatsapp', // 'whatsapp', 'sms', 'email'
     sms_config_id: '',
+    sms_template_id: '',
     email_config_id: '',
     email_subject: '',
     email_template_id: ''
   });
   const [smsConfigs, setSmsConfigs] = useState<any[]>([]);
+  const [smsTemplates, setSmsTemplates] = useState<any[]>([]);
   const [emailConfigs, setEmailConfigs] = useState<any[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<any[]>([]);
 
@@ -48,6 +50,7 @@ const Campaigns: React.FC = () => {
     fetchSegments();
     fetchSavedTTSFiles();
     fetchSMSConfigs();
+    fetchSMSTemplates();
     fetchEmailConfigs();
     fetchEmailTemplates();
   }, []);
@@ -63,6 +66,20 @@ const Campaigns: React.FC = () => {
       }
     } catch (error) {
       console.error('Erro ao buscar configurações SMS:', error);
+    }
+  };
+
+  const fetchSMSTemplates = async () => {
+    try {
+      const response = await fetch('/api/sms/templates', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSmsTemplates(data || []);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar templates SMS:', error);
     }
   };
 
@@ -140,6 +157,7 @@ const Campaigns: React.FC = () => {
         tts_audio_file: formData.use_tts && formData.tts_audio_file ? formData.tts_audio_file : null,
         channel: formData.channel,
         sms_config_id: formData.channel === 'sms' ? formData.sms_config_id : null,
+        sms_template_id: formData.channel === 'sms' ? formData.sms_template_id : null,
         email_config_id: formData.channel === 'email' ? formData.email_config_id : null,
         email_subject: formData.channel === 'email' ? formData.email_subject : null,
         email_template_id: formData.channel === 'email' ? formData.email_template_id : null
@@ -158,6 +176,7 @@ const Campaigns: React.FC = () => {
         tts_audio_file: '',
         channel: 'whatsapp',
         sms_config_id: '',
+        sms_template_id: '',
         email_config_id: '',
         email_subject: '',
         email_template_id: ''
@@ -182,6 +201,7 @@ const Campaigns: React.FC = () => {
       tts_audio_file: campaign.tts_audio_file || '',
       channel: campaign.channel || 'whatsapp',
       sms_config_id: campaign.sms_config_id || '',
+      sms_template_id: campaign.sms_template_id || '',
       email_config_id: campaign.email_config_id || '',
       email_subject: campaign.email_subject || '',
       email_template_id: campaign.email_template_id || ''
@@ -218,6 +238,7 @@ const Campaigns: React.FC = () => {
         tts_audio_file: '',
         channel: 'whatsapp',
         sms_config_id: '',
+        sms_template_id: '',
         email_config_id: '',
         email_subject: '',
         email_template_id: ''
@@ -361,6 +382,7 @@ const Campaigns: React.FC = () => {
                 tts_audio_file: '',
                 channel: 'whatsapp',
                 sms_config_id: '',
+                sms_template_id: '',
                 email_config_id: '',
                 email_subject: '',
                 email_template_id: ''
@@ -605,18 +627,34 @@ const Campaigns: React.FC = () => {
 
               {/* Configurações SMS */}
               {formData.channel === 'sms' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Configuração SMS</label>
-                  <select
-                    value={formData.sms_config_id}
-                    onChange={(e) => setFormData({ ...formData, sms_config_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
-                  >
-                    <option value="">Selecione uma configuração SMS</option>
-                    {smsConfigs.map(config => (
-                      <option key={config.id} value={config.id}>{config.name} ({config.provider})</option>
-                    ))}
-                  </select>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Configuração SMS</label>
+                    <select
+                      value={formData.sms_config_id}
+                      onChange={(e) => setFormData({ ...formData, sms_config_id: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                    >
+                      <option value="">Selecione uma configuração SMS</option>
+                      {smsConfigs.map(config => (
+                        <option key={config.id} value={config.id}>{config.name} ({config.provider})</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Template SMS (Opcional)</label>
+                    <select
+                      value={formData.sms_template_id}
+                      onChange={(e) => setFormData({ ...formData, sms_template_id: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                    >
+                      <option value="">Nenhum template</option>
+                      {smsTemplates.map(template => (
+                        <option key={template.id} value={template.id}>{template.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
 

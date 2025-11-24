@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, User, Shield, Bell, Database, Key, Save } from 'lucide-react';
+import { Settings, User, Shield, Bell, Database, Key, Save, MessageSquare, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const SettingsPage: React.FC = () => {
@@ -40,6 +40,24 @@ const SettingsPage: React.FC = () => {
     timeout: 30
   });
 
+  const [smsConfig, setSmsConfig] = useState({
+    provider: 'zenvia',
+    name: 'Default',
+    apiToken: '',
+    from: ''
+  });
+
+  const [emailConfig, setEmailConfig] = useState({
+    provider: 'smtp',
+    name: 'Default',
+    host: '',
+    port: 587,
+    secure: false,
+    user: '',
+    password: '',
+    from_email: ''
+  });
+
   useEffect(() => {
     fetchSettings();
   }, [activeTab]);
@@ -66,6 +84,44 @@ const SettingsPage: React.FC = () => {
           setNotificationSettings(prev => ({ ...prev, ...data }));
         } else if (activeTab === 'api') {
           setApiSettings(prev => ({ ...prev, ...data }));
+        } else if (activeTab === 'sms') {
+          const smsRes = await fetch(`${apiBase}/sms/configs`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (smsRes.ok) {
+            const smsData = await smsRes.json();
+            const first = Array.isArray(smsData) && smsData.length > 0 ? smsData[0] : null;
+            if (first) {
+              setSmsConfig(prev => ({
+                ...prev,
+                provider: first.provider || 'zenvia',
+                name: first.name || 'Default',
+                apiToken: first.api_token || '',
+                from: first.from_number || ''
+              }));
+            }
+          }
+        } else if (activeTab === 'email') {
+          const emailRes = await fetch(`${apiBase}/email/configs`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (emailRes.ok) {
+            const emailData = await emailRes.json();
+            const first = Array.isArray(emailData) && emailData.length > 0 ? emailData[0] : null;
+            if (first) {
+              setEmailConfig(prev => ({
+                ...prev,
+                provider: first.provider || 'smtp',
+                name: first.name || 'Default',
+                host: first.host || '',
+                port: first.port || 587,
+                secure: !!first.secure,
+                user: first.user || '',
+                password: first.password || '',
+                from_email: first.from_email || ''
+              }));
+            }
+          }
         }
       }
     } catch (error) {
@@ -91,6 +147,54 @@ const SettingsPage: React.FC = () => {
         settingsToSave = notificationSettings;
       } else if (activeTab === 'api') {
         settingsToSave = apiSettings;
+      } else if (activeTab === 'sms') {
+        const response = await fetch(`${apiBase}/sms/configs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            provider: smsConfig.provider,
+            name: smsConfig.name,
+            apiToken: smsConfig.apiToken,
+            from: smsConfig.from
+          })
+        });
+        if (response.ok) {
+          toast({ title: 'Sucesso', description: 'Configuração SMS salva com sucesso!' });
+        } else {
+          const data = await response.json();
+          toast({ title: 'Erro', description: data.message || 'Erro ao salvar configuração SMS', variant: 'destructive' });
+        }
+        setSaving(false);
+        return;
+      } else if (activeTab === 'email') {
+        const response = await fetch(`${apiBase}/email/configs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            provider: emailConfig.provider,
+            name: emailConfig.name,
+            host: emailConfig.host,
+            port: emailConfig.port,
+            secure: emailConfig.secure,
+            user: emailConfig.user,
+            password: emailConfig.password,
+            from_email: emailConfig.from_email
+          })
+        });
+        if (response.ok) {
+          toast({ title: 'Sucesso', description: 'Configuração de Email salva com sucesso!' });
+        } else {
+          const data = await response.json();
+          toast({ title: 'Erro', description: data.message || 'Erro ao salvar configuração de Email', variant: 'destructive' });
+        }
+        setSaving(false);
+        return;
       }
 
       const response = await fetch(`${apiBase}/settings`, {
@@ -121,6 +225,8 @@ const SettingsPage: React.FC = () => {
     { id: 'security', name: 'Segurança', icon: Shield },
     { id: 'notifications', name: 'Notificações', icon: Bell },
     { id: 'api', name: 'API Keys', icon: Key },
+    { id: 'sms', name: 'SMS', icon: MessageSquare },
+    { id: 'email', name: 'Email', icon: Mail },
     { id: 'database', name: 'Banco de Dados', icon: Database }
   ];
 
@@ -463,6 +569,100 @@ const SettingsPage: React.FC = () => {
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'sms' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Configuração de SMS (Zenvia)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Token da API Zenvia</label>
+                    <input
+                      type="text"
+                      value={smsConfig.apiToken}
+                      onChange={(e) => setSmsConfig({ ...smsConfig, apiToken: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Remetente (from)</label>
+                    <input
+                      type="text"
+                      value={smsConfig.from}
+                      onChange={(e) => setSmsConfig({ ...smsConfig, from: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">O sistema usa esta configuração ativa por padrão para envio de SMS.</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'email' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Configuração de Email (SMTP)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Host SMTP</label>
+                    <input
+                      type="text"
+                      value={emailConfig.host}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, host: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Porta</label>
+                    <input
+                      type="number"
+                      value={emailConfig.port}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, port: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      id="email-secure"
+                      type="checkbox"
+                      checked={emailConfig.secure}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, secure: e.target.checked })}
+                    />
+                    <label htmlFor="email-secure" className="text-sm font-medium text-gray-700">Usar SSL (porta 465)</label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Usuário</label>
+                    <input
+                      type="text"
+                      value={emailConfig.user}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, user: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
+                    <input
+                      type="password"
+                      value={emailConfig.password}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, password: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email de Remetente</label>
+                    <input
+                      type="email"
+                      value={emailConfig.from_email}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, from_email: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">O sistema usa esta configuração ativa por padrão para envio de emails.</p>
               </div>
             </div>
           )}

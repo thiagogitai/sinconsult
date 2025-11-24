@@ -281,6 +281,7 @@ function createTables() {
       // Adicionar colunas se não existirem (migration)
       db.run(`ALTER TABLE campaigns ADD COLUMN channel TEXT DEFAULT 'whatsapp'`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN sms_config_id INTEGER`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN sms_template_id INTEGER`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN email_config_id INTEGER`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN email_subject TEXT`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN email_template_id INTEGER`, () => {});
@@ -434,6 +435,20 @@ function createTables() {
         FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL,
         FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL,
         FOREIGN KEY (sms_config_id) REFERENCES sms_configs(id) ON DELETE SET NULL
+      )`, (err) => {
+        if (err) reject(err);
+      });
+
+      // Tabela de templates SMS
+      db.run(`CREATE TABLE IF NOT EXISTS sms_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        variables TEXT DEFAULT '[]',
+        category TEXT DEFAULT 'marketing',
+        is_active BOOLEAN DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`, (err) => {
         if (err) reject(err);
       });
@@ -913,6 +928,7 @@ app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), 
       tts_audio_file,
       channel,
       sms_config_id,
+      sms_template_id,
       email_config_id,
       email_subject,
       email_template_id
@@ -929,11 +945,12 @@ app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), 
         tts_audio_file,
         channel,
         sms_config_id,
+        sms_template_id,
         email_config_id,
         email_subject,
         email_template_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       name, 
       message_template, 
@@ -944,6 +961,7 @@ app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), 
       tts_audio_file || null,
       channel || 'whatsapp',
       sms_config_id || null,
+      sms_template_id || null,
       email_config_id || null,
       email_subject || null,
       email_template_id || null
@@ -992,6 +1010,102 @@ app.post('/api/campaigns/:id/pause', authenticateToken, asyncHandler(async (req,
     res.json({ success: true, data: updatedCampaign });
   } catch (error) {
     logger.error('Erro ao pausar campanha:', { error });
+    throw error;
+  }
+}));
+
+// Aplicar template à campanha (requer autenticação)
+app.post('/api/campaigns/:id/apply-template', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { template_type, template_id, variables } = req.body;
+    
+    if (!template_type || !template_id) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Tipo de template e ID do template são obrigatórios' 
+      });
+    }
+    
+    let templateData;
+    let updateFields = [];
+    let updateValues = [];
+    
+    if (template_type === 'sms') {
+      // Buscar template SMS
+      templateData = await dbGet('SELECT * FROM sms_templates WHERE id = ?', [template_id]);
+      if (!templateData) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Template SMS não encontrado' 
+        });
+      }
+      
+      // Aplicar variáveis ao conteúdo
+      let message = templateData.content;
+      if (variables && typeof variables === 'object') {
+        Object.entries(variables).forEach(([key, value]) => {
+          message = message.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
+        });
+      }
+      
+      updateFields.push('message = ?', 'sms_template_id = ?');
+      updateValues.push(message, template_id);
+      
+    } else if (template_type === 'email') {
+      // Buscar template Email
+      templateData = await dbGet('SELECT * FROM email_templates WHERE id = ?', [template_id]);
+      if (!templateData) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Template de email não encontrado' 
+        });
+      }
+      
+      // Aplicar variáveis ao conteúdo e assunto
+      let subject = templateData.subject;
+      let htmlContent = templateData.html_content;
+      let textContent = templateData.text_content;
+      
+      if (variables && typeof variables === 'object') {
+        Object.entries(variables).forEach(([key, value]) => {
+          const regex = new RegExp(`{{${key}}}`, 'g');
+          subject = subject.replace(regex, String(value));
+          htmlContent = htmlContent.replace(regex, String(value));
+          textContent = textContent.replace(regex, String(value));
+        });
+      }
+      
+      updateFields.push('message = ?', 'email_subject = ?', 'email_template_id = ?');
+      updateValues.push(textContent, subject, template_id);
+      
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Tipo de template inválido. Use "sms" ou "email"' 
+      });
+    }
+    
+    // Atualizar campanha
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+    updateValues.push(id);
+    
+    await dbRun(`
+      UPDATE campaigns 
+      SET ${updateFields.join(', ')}
+      WHERE id = ?
+    `, updateValues);
+    
+    const updatedCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    
+    res.json({
+      success: true,
+      message: 'Template aplicado com sucesso',
+      data: updatedCampaign
+    });
+    
+  } catch (error) {
+    logger.error('Erro ao aplicar template à campanha:', { error });
     throw error;
   }
 }));
@@ -1664,6 +1778,155 @@ app.get('/api/sms/history', authenticateToken, asyncHandler(async (req, res) => 
     res.json(messages);
   } catch (error) {
     logger.error('Erro ao buscar histórico SMS:', { error });
+    throw error;
+  }
+}));
+
+// ===== ROTAS DE TEMPLATES SMS =====
+
+// Listar templates SMS (requer autenticação)
+app.get('/api/sms/templates', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const templates = await dbAll(`
+      SELECT 
+        id,
+        name,
+        content,
+        variables,
+        category,
+        is_active,
+        created_at,
+        updated_at
+      FROM sms_templates
+      WHERE 1=1
+      ORDER BY created_at DESC
+    `);
+    
+    // Parse variables JSON
+    const parsedTemplates = templates.map(template => ({
+      ...template,
+      variables: template.variables ? JSON.parse(template.variables) : []
+    }));
+    
+    res.json(parsedTemplates);
+  } catch (error) {
+    logger.error('Erro ao buscar templates SMS:', { error });
+    throw error;
+  }
+}));
+
+// Criar template SMS (requer autenticação)
+app.post('/api/sms/templates', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { name, content, variables, category, is_active } = req.body;
+    
+    if (!name || !content) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Nome e conteúdo do template são obrigatórios' 
+      });
+    }
+    
+    const result = await dbRun(`
+      INSERT INTO sms_templates (name, content, variables, category, is_active)
+      VALUES (?, ?, ?, ?, ?)
+    `, [
+      name.trim(),
+      content.trim(),
+      JSON.stringify(variables || []),
+      category || 'marketing',
+      is_active !== false ? 1 : 0
+    ]);
+    
+    const newTemplate = await dbGet(`
+      SELECT * FROM sms_templates WHERE id = ?
+    `, [result.lastID]);
+    
+    res.json({
+      success: true,
+      message: 'Template criado com sucesso',
+      data: {
+        ...newTemplate,
+        variables: newTemplate.variables ? JSON.parse(newTemplate.variables) : []
+      }
+    });
+  } catch (error) {
+    logger.error('Erro ao criar template SMS:', { error });
+    throw error;
+  }
+}));
+
+// Atualizar template SMS (requer autenticação)
+app.put('/api/sms/templates/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, content, variables, category, is_active } = req.body;
+    
+    if (!name || !content) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Nome e conteúdo do template são obrigatórios' 
+      });
+    }
+    
+    await dbRun(`
+      UPDATE sms_templates 
+      SET name = ?, content = ?, variables = ?, category = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [
+      name.trim(),
+      content.trim(),
+      JSON.stringify(variables || []),
+      category || 'marketing',
+      is_active !== false ? 1 : 0,
+      id
+    ]);
+    
+    const updatedTemplate = await dbGet(`
+      SELECT * FROM sms_templates WHERE id = ?
+    `, [id]);
+    
+    if (!updatedTemplate) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Template não encontrado' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Template atualizado com sucesso',
+      data: {
+        ...updatedTemplate,
+        variables: updatedTemplate.variables ? JSON.parse(updatedTemplate.variables) : []
+      }
+    });
+  } catch (error) {
+    logger.error('Erro ao atualizar template SMS:', { error });
+    throw error;
+  }
+}));
+
+// Deletar template SMS (requer autenticação)
+app.delete('/api/sms/templates/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const result = await dbRun('DELETE FROM sms_templates WHERE id = ?', [id]);
+    
+    if (result.changes === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Template não encontrado' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Template deletado com sucesso'
+    });
+  } catch (error) {
+    logger.error('Erro ao deletar template SMS:', { error });
     throw error;
   }
 }));
@@ -2761,6 +3024,74 @@ app.get('/api/campaigns/recent', authenticateToken, asyncHandler(async (req, res
 
 // ===== ROTAS DE INSTÂNCIAS WHATSAPP =====
 
+// Debug: Testar conexão com Evolution API (sem autenticação para teste)
+app.get('/api/whatsapp/test-connection', asyncHandler(async (req, res) => {
+  try {
+    console.log('=== DEBUG EVOLUTION API ===');
+    console.log('URL:', process.env.EVOLUTION_API_URL);
+    console.log('API Key existente:', !!process.env.EVOLUTION_API_KEY);
+    console.log('API Key length:', process.env.EVOLUTION_API_KEY?.length || 0);
+    
+    const isConnected = await evolutionAPI.checkConnection();
+    
+    console.log('Conexão Evolution API:', isConnected ? 'SUCESSO' : 'FALHA');
+    
+    res.json({
+      success: true,
+      connected: isConnected,
+      config: {
+        url: process.env.EVOLUTION_API_URL,
+        hasApiKey: !!process.env.EVOLUTION_API_KEY,
+        apiKeyLength: process.env.EVOLUTION_API_KEY?.length || 0
+      }
+    });
+  } catch (error) {
+    console.error('Erro detalhado ao testar conexão:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao testar conexão',
+      details: error.message,
+      stack: error.stack
+    });
+  }
+}));
+
+// Debug: Criar instância completamente aberta para teste
+app.post('/api/whatsapp/test-open', asyncHandler(async (req, res) => {
+  try {
+    console.log('=== DEBUG CRIAR INSTÂNCIA OPEN ===');
+    console.log('Body recebido:', req.body);
+    
+    const { name } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nome da instância é obrigatório'
+      });
+    }
+    
+    console.log('Criando instância:', name);
+    const evolutionInstance = await evolutionAPI.createInstance(name);
+    console.log('Instância criada com sucesso:', evolutionInstance);
+    
+    res.json({
+      success: true,
+      message: 'Instância criada com sucesso',
+      instance: evolutionInstance
+    });
+    
+  } catch (error) {
+    console.error('Erro detalhado ao criar instância:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao criar instância',
+      details: error.message,
+      stack: error.stack
+    });
+  }
+}));
+
 // Listar instâncias (requer autenticação)
 app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, res) => {
   try {
@@ -2814,14 +3145,22 @@ app.get('/api/whatsapp/health', authenticateToken, asyncHandler(async (req, res)
   }
 }));
 
-// Criar instância (requer autenticação)
-app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWhatsAppInstance), asyncHandler(async (req, res) => {
+// Criar instância (requer autenticação) - VERSÃO SEM VALIDAÇÃO PARA DEBUG
+app.post('/api/whatsapp/instances-debug', authenticateToken, asyncHandler(async (req, res) => {
   try {
+    console.log('=== DEBUG CRIAR INSTÂNCIA ===');
+    console.log('Body recebido:', req.body);
+    console.log('Headers:', req.headers);
+    
     const { name, instance_name, phone_number, phone } = req.body;
     const instanceName = name || instance_name;
     const phoneNumber = phone_number || phone;
     
+    console.log('Instance name:', instanceName);
+    console.log('Phone number:', phoneNumber);
+    
     if (!instanceName) {
+      console.log('Erro: Nome da instância é obrigatório');
       return res.status(400).json({
         success: false,
         error: 'Nome da instância é obrigatório'
@@ -2829,8 +3168,69 @@ app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWh
     }
     
     // Verificar se Evolution API está acessível
+    console.log('Verificando conexão com Evolution API...');
     const isConnected = await evolutionAPI.checkConnection();
+    console.log('Evolution API conectada:', isConnected);
+    
     if (!isConnected) {
+      console.log('Evolution API não está acessível');
+      return res.status(503).json({
+        success: false,
+        error: 'Evolution API não está acessível',
+        message: 'Verifique se a Evolution API está rodando e se as configurações estão corretas no arquivo .env'
+      });
+    }
+    
+    // Criar instância na Evolution API
+    console.log('Criando instância na Evolution API...');
+    const evolutionInstance = await evolutionAPI.createInstance(instanceName, phoneNumber);
+    console.log('Instância criada com sucesso:', evolutionInstance);
+    
+    res.json({
+      success: true,
+      message: 'Instância criada com sucesso',
+      instance: evolutionInstance
+    });
+    
+  } catch (error) {
+    console.error('Erro detalhado ao criar instância:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao criar instância',
+      details: error.message,
+      stack: error.stack
+    });
+  }
+}));
+
+// Criar instância (requer autenticação)
+app.post('/api/whatsapp/instances', authenticateToken, validate(schemas.createWhatsAppInstance), asyncHandler(async (req, res) => {
+  try {
+    console.log('=== DEBUG CRIAR INSTÂNCIA ORIGINAL ===');
+    console.log('Body recebido:', req.body);
+    
+    const { name, instance_name, phone_number, phone } = req.body;
+    const instanceName = name || instance_name;
+    const phoneNumber = phone_number || phone;
+    
+    console.log('Instance name:', instanceName);
+    console.log('Phone number:', phoneNumber);
+    
+    if (!instanceName) {
+      console.log('Erro: Nome da instância é obrigatório');
+      return res.status(400).json({
+        success: false,
+        error: 'Nome da instância é obrigatório'
+      });
+    }
+    
+    // Verificar se Evolution API está acessível
+    console.log('Verificando conexão com Evolution API...');
+    const isConnected = await evolutionAPI.checkConnection();
+    console.log('Evolution API conectada:', isConnected);
+    
+    if (!isConnected) {
+      console.log('Evolution API não está acessível');
       return res.status(503).json({
         success: false,
         error: 'Evolution API não está acessível',
@@ -2901,19 +3301,27 @@ app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(
       return res.status(404).json({ error: 'Instância não encontrada' });
     }
     
-    // Conectar na Evolution API
+    // Conectar na Evolution API (gera QR Code)
     const connectionData = await evolutionAPI.connectInstance(instance.instance_id);
+    const base64 = (connectionData as any).base64 as string | undefined;
+    const code = (connectionData as any).code as string | undefined;
+    
+    // Normalizar base64 para armazenar apenas o conteúdo
+    const base64Content = base64 && base64.startsWith('data:image')
+      ? base64.split(',')[1]
+      : base64 || null;
     
     // Atualizar status no banco
     await dbRun(`
       UPDATE whatsapp_instances 
       SET status = ?, qrcode = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, ['connecting', connectionData.qrcode, id]);
+    `, ['connecting', base64Content, id]);
     
     res.json({
-      qrcode: connectionData.qrcode,
-      qrcode_url: connectionData.qrcode ? `data:image/png;base64,${connectionData.qrcode}` : null,
+      qrcode: base64Content,
+      qrcode_url: base64 || (base64Content ? `data:image/png;base64,${base64Content}` : null),
+      code,
       status: 'connecting'
     });
   } catch (error) {
