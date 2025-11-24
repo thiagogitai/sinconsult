@@ -161,6 +161,15 @@ if (fs.existsSync(distPath)) {
   }
 }
 
+// Servir arquivos de upload
+const uploadsPath = path.join(projectRoot, 'uploads');
+if (fs.existsSync(uploadsPath)) {
+  app.use('/uploads', express.static(uploadsPath));
+  logger.info('✅ Servindo arquivos de upload de:', uploadsPath);
+} else {
+  logger.warn('⚠️  Pasta uploads/ não encontrada em:', uploadsPath);
+}
+
 // Rate limiting global
 app.use(defaultRateLimiter);
 
@@ -280,6 +289,19 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error('Apenas arquivos Excel são permitidos'));
+    }
+  }
+});
+
+// Upload para imagens (apenas imagens)
+const uploadImage = multer({ 
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limite
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos de imagem são permitidos'));
     }
   }
 });
@@ -985,8 +1007,10 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
 }));
 
 // Criar campanha (requer autenticação)
-app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), asyncHandler(async (req, res) => {
+app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
   try {
+    // A validação pode estar esperando body aninhado, vamos aceitar ambos os formatos
+    const bodyData = req.body.body || req.body;
     const { 
       name, 
       message_template, 
@@ -1001,7 +1025,28 @@ app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), 
       email_config_id,
       email_subject,
       email_template_id
-    } = req.body;
+    } = {
+      ...bodyData,
+      ...req.body
+    };
+    
+    // Validação manual
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nome da campanha é obrigatório'
+      });
+    }
+    
+    if (!message_template || !message_template.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Mensagem é obrigatória'
+      });
+    }
+    
+    // Verificar se há media_url no body (pode ser URL de imagem já enviada)
+    const media_url = bodyData.media_url || req.body.media_url || null;
     
     const result = await dbRun(`
       INSERT INTO campaigns (
@@ -1017,9 +1062,10 @@ app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), 
         sms_template_id,
         email_config_id,
         email_subject,
-        email_template_id
+        email_template_id,
+        media_url
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       name, 
       message_template, 
@@ -1033,7 +1079,8 @@ app.post('/api/campaigns', authenticateToken, validate(schemas.createCampaign), 
       sms_template_id || null,
       email_config_id || null,
       email_subject || null,
-      email_template_id || null
+      email_template_id || null,
+      media_url
     ]);
     
     const newCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
@@ -1265,6 +1312,10 @@ app.get('/api/contacts', authenticateToken, asyncHandler(async (req, res) => {
         '' as custom_fields,
         is_active,
         is_blocked,
+        CASE 
+          WHEN is_active = 1 OR is_active IS NULL THEN 'active'
+          ELSE 'canceled'
+        END as status,
         created_at,
         updated_at
       FROM contacts
@@ -1404,6 +1455,117 @@ app.post('/api/contacts', authenticateToken, validate(schemas.createContact), as
     res.json(newContact);
   } catch (error) {
     logger.error('Erro ao criar contato:', { error });
+    throw error;
+  }
+}));
+
+// ===== ROTAS DE SEGMENTOS =====
+
+// Listar segmentos (requer autenticação)
+app.get('/api/segments', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    // Buscar segmentos únicos dos contatos
+    const segments = await dbAll(`
+      SELECT DISTINCT 
+        segment as name,
+        segment as id,
+        COUNT(*) as contact_count
+      FROM contacts
+      WHERE segment IS NOT NULL AND segment != ''
+      GROUP BY segment
+      ORDER BY contact_count DESC, segment ASC
+    `);
+    
+    res.json(segments);
+  } catch (error) {
+    logger.error('Erro ao buscar segmentos:', { error });
+    throw error;
+  }
+}));
+
+// Criar segmento (requer autenticação)
+app.post('/api/segments', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nome do segmento é obrigatório'
+      });
+    }
+    
+    // Verificar se já existe
+    const existing = await dbGet('SELECT COUNT(*) as count FROM contacts WHERE segment = ?', [name.trim()]);
+    
+    res.json({
+      id: name.trim(),
+      name: name.trim(),
+      contact_count: existing?.count || 0
+    });
+  } catch (error) {
+    logger.error('Erro ao criar segmento:', { error });
+    throw error;
+  }
+}));
+
+// Obter contatos de um segmento (requer autenticação)
+app.get('/api/segments/:id/contacts', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const contacts = await dbAll(`
+      SELECT 
+        id,
+        name,
+        phone,
+        email,
+        segment as tags,
+        is_active,
+        is_blocked,
+        created_at
+      FROM contacts
+      WHERE segment = ? AND (is_blocked = 0 OR is_blocked IS NULL)
+      ORDER BY created_at DESC
+    `, [id]);
+    
+    res.json(contacts);
+  } catch (error) {
+    logger.error('Erro ao buscar contatos do segmento:', { error });
+    throw error;
+  }
+}));
+
+// ===== ROTAS DE UPLOAD DE IMAGENS =====
+
+// Upload de imagem para campanhas (requer autenticação)
+app.post('/api/upload/image', authenticateToken, uploadImage.single('image'), asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhuma imagem enviada'
+      });
+    }
+    
+    // Retornar URL da imagem
+    const imageUrl = `/uploads/${req.file.filename}`;
+    
+    res.json({
+      success: true,
+      url: imageUrl,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+  } catch (error: any) {
+    logger.error('Erro ao fazer upload de imagem:', { error });
+    if (error.message) {
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
     throw error;
   }
 }));
@@ -2680,23 +2842,35 @@ app.get('/api/tts/metrics', authenticateToken, asyncHandler(async (req, res) => 
 // Arquivos TTS salvos (requer autenticação)
 app.get('/api/tts/files', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const files = await dbAll(`
-      SELECT 
-        id,
-        filename,
-        original_text as texto_original,
-        duration_seconds as duracao,
-        size_kb || ' KB' as tamanho,
-        access_count as acessos,
-        created_at as criado_em,
-        CASE 
-          WHEN expires_at IS NULL THEN 30
-          ELSE CAST((julianday(expires_at) - julianday('now')) AS INTEGER)
-        END as expira_em_dias
-      FROM tts_files 
-      ORDER BY created_at DESC 
-      LIMIT 50
-    `);
+    // Verificar se a tabela existe, se não existir retornar array vazio
+    let files: any[] = [];
+    try {
+      files = await dbAll(`
+        SELECT 
+          id,
+          filename,
+          original_text as texto_original,
+          duration_seconds as duracao,
+          size_kb || ' KB' as tamanho,
+          access_count as acessos,
+          created_at as criado_em,
+          CASE 
+            WHEN expires_at IS NULL THEN 30
+            ELSE CAST((julianday(expires_at) - julianday('now')) AS INTEGER)
+          END as expira_em_dias
+        FROM tts_files 
+        ORDER BY created_at DESC 
+        LIMIT 50
+      `);
+    } catch (error: any) {
+      // Se a tabela não existir, retornar array vazio
+      if (error.message && error.message.includes('no such table')) {
+        logger.info('Tabela tts_files não existe ainda, retornando array vazio');
+        files = [];
+      } else {
+        throw error;
+      }
+    }
     
     res.json({ files: files });
   } catch (error) {
