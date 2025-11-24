@@ -39,14 +39,35 @@ const Contacts: React.FC = () => {
     try {
       setLoading(true);
       
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para visualizar contatos',
+          variant: 'destructive'
+        });
+        setContacts([]);
+        setLoading(false);
+        return;
+      }
+      
       // Buscar contatos da API
-      const response = await fetch('/api/contacts');
+      const response = await fetch('/api/contacts', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await response.json();
       
       if (response.ok) {
         setContacts(data.data || []);
       } else {
         console.error('Erro ao carregar contatos:', data.message);
+        toast({
+          title: 'Erro',
+          description: data.message || 'Erro ao carregar contatos',
+          variant: 'destructive'
+        });
       }
     } catch (error) {
       console.error('Erro ao carregar contatos:', error);
@@ -59,6 +80,16 @@ const Contacts: React.FC = () => {
 
   const handleCreateContact = async () => {
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para criar contatos',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const contactData = {
         name: formData.name,
         phone: formData.phone,
@@ -69,7 +100,8 @@ const Contacts: React.FC = () => {
       const response = await fetch('/api/contacts', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(contactData)
       });
@@ -77,15 +109,27 @@ const Contacts: React.FC = () => {
       const data = await response.json();
       
       if (response.ok) {
+        toast({
+          title: 'Sucesso',
+          description: 'Contato criado com sucesso!'
+        });
         setShowModal(false);
         setFormData({ name: '', phone: '', email: '', tags: '' });
         fetchContacts();
       } else {
-        alert('Erro ao criar contato: ' + data.message);
+        toast({
+          title: 'Erro',
+          description: data.message || 'Erro ao criar contato',
+          variant: 'destructive'
+        });
       }
     } catch (error) {
       console.error('Erro ao criar contato:', error);
-      alert('Erro ao criar contato. Tente novamente.');
+      toast({
+        title: 'Erro',
+        description: 'Erro de conexão com o servidor',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -104,6 +148,16 @@ const Contacts: React.FC = () => {
     if (!editingContact) return;
 
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para atualizar contatos',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const contactData = {
         name: formData.name,
         phone: formData.phone,
@@ -114,7 +168,8 @@ const Contacts: React.FC = () => {
       const response = await fetch(`/api/contacts/${editingContact.id}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(contactData)
       });
@@ -122,16 +177,28 @@ const Contacts: React.FC = () => {
       const data = await response.json();
       
       if (response.ok) {
+        toast({
+          title: 'Sucesso',
+          description: 'Contato atualizado com sucesso!'
+        });
         setShowModal(false);
         setEditingContact(null);
         setFormData({ name: '', phone: '', email: '', tags: '' });
         fetchContacts();
       } else {
-        alert('Erro ao atualizar contato: ' + data.message);
+        toast({
+          title: 'Erro',
+          description: data.message || 'Erro ao atualizar contato',
+          variant: 'destructive'
+        });
       }
     } catch (error) {
       console.error('Erro ao atualizar contato:', error);
-      alert('Erro ao atualizar contato. Tente novamente.');
+      toast({
+        title: 'Erro',
+        description: 'Erro de conexão com o servidor',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -139,20 +206,45 @@ const Contacts: React.FC = () => {
     if (!confirm('Tem certeza que deseja excluir este contato?')) return;
 
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar autenticado para excluir contatos',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const response = await fetch(`/api/contacts/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       const data = await response.json();
       
       if (response.ok) {
+        toast({
+          title: 'Sucesso',
+          description: 'Contato excluído com sucesso!'
+        });
         fetchContacts();
       } else {
-        alert('Erro ao excluir contato: ' + data.message);
+        toast({
+          title: 'Erro',
+          description: data.message || 'Erro ao excluir contato',
+          variant: 'destructive'
+        });
       }
     } catch (error) {
       console.error('Erro ao excluir contato:', error);
-      alert('Erro ao excluir contato. Tente novamente.');
+      toast({
+        title: 'Erro',
+        description: 'Erro de conexão com o servidor',
+        variant: 'destructive'
+      });
     }
   };
 
