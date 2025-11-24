@@ -3319,12 +3319,13 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
           
           const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instanceName);
           
-          // Evolution API pode retornar state ou status
-          const state = evolutionStatus.state || evolutionStatus.status || '';
+          // Evolution API pode retornar state aninhado em instance ou diretamente
+          const instanceData = evolutionStatus.instance || evolutionStatus;
+          const state = instanceData.state || evolutionStatus.state || evolutionStatus.status || '';
           const stateStr = String(state).toLowerCase();
           
           // Também verificar connectionState se existir
-          const connectionState = (evolutionStatus as any).connectionState || state;
+          const connectionState = instanceData.connectionState || (evolutionStatus as any).connectionState || state;
           const connectionStateStr = String(connectionState).toLowerCase();
           
           logger.info(`Status retornado pela Evolution API para ${instanceName}:`, { 
@@ -3332,16 +3333,26 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
             stateStr, 
             connectionState,
             connectionStateStr,
+            instanceData,
             fullResponse: evolutionStatus 
           });
           
           let mappedStatus = instance.status;
           // Verificar ambos state e connectionState
           const finalState = connectionStateStr || stateStr;
+          
+          // Se state é "connecting" mas já passou tempo suficiente, verificar se realmente está conectado
           if (finalState === 'open' || finalState === 'connected') {
             mappedStatus = 'connected';
           } else if (finalState === 'close' || finalState === 'closed' || finalState === 'disconnected') {
             mappedStatus = 'disconnected';
+          } else if (finalState === 'connecting') {
+            // Se está "connecting" há muito tempo, pode já estar conectado
+            // Verificar se há phoneConnected ou outros indicadores
+            const hasPhone = evolutionStatus.phoneConnected || evolutionStatus.phoneNumber || instanceData.phoneConnected || instanceData.phoneNumber;
+            if (hasPhone) {
+              mappedStatus = 'connected';
+            }
           }
           
           // Se o status mudou, atualizar no banco
@@ -3531,15 +3542,24 @@ app.post('/api/whatsapp/instances',
     // A resposta do Evolution API pode ter diferentes formatos
     const instanceId = evolutionInstance.instanceId || evolutionInstance.instanceName || instanceName;
     const qrcode = evolutionInstance.qrcode || evolutionInstance.qrcodeBase64 || null;
-    const status = evolutionInstance.status || 'created';
+    // Status inicial deve ser "connecting" se tiver QR code, senão "created"
+    const status = qrcode ? 'connecting' : (evolutionInstance.status || 'created');
+    
+    logger.info('Criando instância no banco:', { instanceName, instanceId, status, hasQRCode: !!qrcode });
     
     // Salvar no banco de dados local
     const result = await dbRun(`
-      INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, qrcode)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, qrcode, is_active)
+      VALUES (?, ?, ?, ?, ?, 1)
     `, [instanceName, instanceId, phoneNumber || null, status, qrcode || null]);
     
     const newInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [result.lastID]);
+    
+    if (!newInstance) {
+      throw new Error('Erro ao recuperar instância criada');
+    }
+    
+    logger.info('Instância criada com sucesso:', { id: newInstance.id, name: newInstance.name });
     
     res.json({
       ...newInstance,
