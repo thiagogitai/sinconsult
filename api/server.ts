@@ -22,6 +22,7 @@ import { validate, schemas } from './utils/validators.js';
 import { validatePhone, normalizePhone } from './utils/phoneValidator.js';
 import { SMSServiceFactory } from './services/sms.js';
 import { EmailServiceFactory } from './services/email.js';
+import crypto from 'crypto';
 
 // Definir __dirname para ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -33,7 +34,6 @@ dotenv.config();
 // Validar e gerar JWT_SECRET se necessário
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secret-jwt-key-change-this-in-production') {
   // Gerar JWT_SECRET automaticamente
-  const crypto = await import('crypto');
   const generatedSecret = crypto.randomBytes(64).toString('hex');
   process.env.JWT_SECRET = generatedSecret;
   
