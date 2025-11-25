@@ -3807,6 +3807,21 @@ app.get('/api/whatsapp/test-connection', asyncHandler(async (req, res) => {
   }
 }));
 
+app.post('/api/whatsapp/instances/:name/webhook', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { url } = req.body as any;
+    if (!url || String(url).trim() === '') {
+      return res.status(400).json({ success: false, error: 'URL do webhook é obrigatória' });
+    }
+    await evolutionAPI.setupWebhook(name, url);
+    res.json({ success: true, message: 'Webhook configurado com sucesso' });
+  } catch (error: any) {
+    logger.error('Erro ao configurar webhook da instância:', { error: error.message });
+    res.status(500).json({ success: false, error: error.message || 'Erro ao configurar webhook' });
+  }
+}));
+
 // Debug: Criar instância completamente aberta para teste
 app.post('/api/whatsapp/test-open', asyncHandler(async (req, res) => {
   try {
