@@ -1225,6 +1225,93 @@ app.patch('/api/campaigns/:id/status', authenticateToken, asyncHandler(async (re
   }
 }));
 
+// Atualizar campanha (requer autenticação)
+app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      message,
+      message_template,
+      message_type,
+      type,
+      scheduled_at,
+      scheduled_time,
+      schedule_time,
+      use_tts,
+      tts_config_id,
+      tts_audio_file,
+      channel,
+      sms_config_id,
+      sms_template_id,
+      email_config_id,
+      email_subject,
+      email_template_id,
+      media_url,
+      status
+    } = req.body;
+
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    const setIf = (field: string, value: any) => {
+      if (value !== undefined) {
+        updates.push(`${field} = ?`);
+        params.push(value);
+      }
+    };
+
+    setIf('name', name);
+    setIf('message', message ?? message_template);
+    setIf('message_type', message_type ?? type);
+    const sched = scheduled_at ?? scheduled_time ?? schedule_time;
+    setIf('scheduled_at', sched);
+    setIf('use_tts', use_tts);
+    setIf('tts_config_id', tts_config_id);
+    setIf('tts_audio_file', tts_audio_file);
+    setIf('channel', channel);
+    setIf('sms_config_id', sms_config_id);
+    setIf('sms_template_id', sms_template_id);
+    setIf('email_config_id', email_config_id);
+    setIf('email_subject', email_subject);
+    setIf('email_template_id', email_template_id);
+    setIf('media_url', media_url);
+    setIf('status', status);
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+
+    if (updates.length === 1) {
+      return res.status(400).json({ success: false, error: 'Nenhum campo para atualizar' });
+    }
+
+    await dbRun(`
+      UPDATE campaigns SET ${updates.join(', ')} WHERE id = ?
+    `, params);
+
+    const updated = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    res.json(updated);
+  } catch (error: any) {
+    logger.error('Erro ao atualizar campanha:', { error: error.message });
+    throw error;
+  }
+}));
+
+// Parar campanha (requer autenticação)
+app.post('/api/campaigns/:id/stop', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    await dbRun(`
+      UPDATE campaigns SET status = 'paused', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `, [id]);
+    const updated = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    logger.error('Erro ao parar campanha:', { error });
+    throw error;
+  }
+}));
+
 // Iniciar campanha (requer autenticação)
 app.post('/api/campaigns/:id/start', authenticateToken, asyncHandler(async (req, res) => {
   try {
