@@ -1302,8 +1302,13 @@ app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) =
     setIf('name', name);
     setIf('message', message ?? message_template);
     setIf('message_type', message_type ?? type);
-    const sched = scheduled_at ?? scheduled_time ?? schedule_time;
-    setIf('scheduled_at', sched);
+    const schedRaw = scheduled_at ?? scheduled_time ?? schedule_time;
+    let schedNorm: string | undefined = undefined;
+    if (schedRaw) {
+      const s = String(schedRaw).replace('T', ' ').trim();
+      schedNorm = s.length === 16 ? `${s}:00` : s;
+    }
+    setIf('scheduled_at', schedNorm);
     setIf('use_tts', use_tts);
     setIf('tts_config_id', tts_config_id);
     setIf('tts_audio_file', tts_audio_file);
@@ -1314,7 +1319,11 @@ app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) =
     setIf('email_subject', email_subject);
     setIf('email_template_id', email_template_id);
     setIf('media_url', media_url);
-    setIf('status', status);
+    if (status !== undefined) {
+      setIf('status', status);
+    } else if (schedNorm) {
+      setIf('status', 'scheduled');
+    }
     setIf('is_test', req.body.is_test !== undefined ? (req.body.is_test ? 1 : 0) : undefined);
     setIf('test_phone', req.body.test_phone);
 
@@ -1329,7 +1338,11 @@ app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) =
       UPDATE campaigns SET ${updates.join(', ')} WHERE id = ?
     `, params);
 
-    const updated = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    let updated = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    if (updated && updated.status === 'draft' && updated.scheduled_at) {
+      await dbRun(`UPDATE campaigns SET status = 'scheduled', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
+      updated = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    }
     res.json(updated);
   } catch (error: any) {
     logger.error('Erro ao atualizar campanha:', { error: error.message });
