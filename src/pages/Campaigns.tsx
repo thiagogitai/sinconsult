@@ -39,7 +39,9 @@ const Campaigns: React.FC = () => {
     email_config_id: '',
     email_subject: '',
     email_template_id: '',
-    media_url: '' // URL da imagem ou vídeo
+    media_url: '', // URL da imagem ou vídeo
+    is_test: false,
+    test_phone: ''
   });
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
@@ -235,7 +237,9 @@ const Campaigns: React.FC = () => {
         email_config_id: formData.channel === 'email' ? formData.email_config_id : null,
         email_subject: formData.channel === 'email' ? formData.email_subject : null,
         email_template_id: formData.channel === 'email' ? formData.email_template_id : null,
-        media_url: formData.media_url || null
+        media_url: formData.media_url || null,
+        is_test: formData.is_test,
+        test_phone: formData.is_test ? formData.test_phone : null
       };
 
       await campaignsAPI.create(campaignData);
@@ -255,7 +259,9 @@ const Campaigns: React.FC = () => {
         email_config_id: '',
         email_subject: '',
         email_template_id: '',
-        media_url: ''
+        media_url: '',
+        is_test: false,
+        test_phone: ''
       });
       setMediaPreview(null);
       fetchCampaigns();
@@ -283,7 +289,9 @@ const Campaigns: React.FC = () => {
       email_config_id: campaign.email_config_id || '',
       email_subject: campaign.email_subject || '',
       email_template_id: campaign.email_template_id || '',
-      media_url: campaign.media_url || ''
+      media_url: campaign.media_url || '',
+      is_test: !!campaign.is_test,
+      test_phone: campaign.test_phone || ''
     });
     setMediaPreview(campaign.media_url || null);
     setShowModal(true);
@@ -301,7 +309,9 @@ const Campaigns: React.FC = () => {
         scheduled_time: formData.schedule,
         use_tts: formData.use_tts,
         tts_config_id: formData.use_tts ? formData.tts_config_id : null,
-        tts_audio_file: formData.use_tts && formData.tts_audio_file ? formData.tts_audio_file : null
+        tts_audio_file: formData.use_tts && formData.tts_audio_file ? formData.tts_audio_file : null,
+        is_test: formData.is_test,
+        test_phone: formData.is_test ? formData.test_phone : null
       };
 
       await campaignsAPI.update(editingCampaign.id, campaignData);
@@ -322,7 +332,9 @@ const Campaigns: React.FC = () => {
         email_config_id: '',
         email_subject: '',
         email_template_id: '',
-        media_url: ''
+        media_url: '',
+        is_test: false,
+        test_phone: ''
       });
       fetchCampaigns();
     } catch (error) {
@@ -696,19 +708,20 @@ const Campaigns: React.FC = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Segmento</label>
-                  <select
-                    value={formData.segment_id}
-                    onChange={(e) => setFormData({ ...formData, segment_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
-                  >
-                    <option value="">Selecione um segmento</option>
-                    {segments.map(segment => (
-                      <option key={segment.id} value={segment.id}>{segment.name}</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Segmento</label>
+                <select
+                  value={formData.segment_id}
+                  onChange={(e) => setFormData({ ...formData, segment_id: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                  disabled={formData.is_test}
+                >
+                  <option value="">Selecione um segmento</option>
+                  {segments.map(segment => (
+                    <option key={segment.id} value={segment.id}>{segment.name}</option>
+                  ))}
+                </select>
+              </div>
               </div>
 
               {/* Configurações SMS */}
@@ -796,20 +809,50 @@ const Campaigns: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    checked={formData.use_tts}
-                    onChange={(e) => setFormData({ ...formData, use_tts: e.target.checked })}
-                    className="w-4 h-4 text-gray-700 border-gray-300 rounded focus:ring-gray-500"
-                  />
-                  <div>
-                    <span className="text-sm font-semibold text-gray-700">Usar Texto-para-Áudio (TTS)</span>
-                    <p className="text-xs text-gray-500">Transforme texto em áudio automaticamente</p>
-                  </div>
-                </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_test}
+                      onChange={(e) => setFormData({ ...formData, is_test: e.target.checked })}
+                      className="w-4 h-4 text-gray-700 border-gray-300 rounded focus:ring-gray-500"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-gray-700">Modo Teste</span>
+                      <p className="text-xs text-gray-500">Envia para telefone de teste ou 1 contato</p>
+                    </div>
+                  </label>
+                </div>
+                <div>
+                  <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={formData.use_tts}
+                      onChange={(e) => setFormData({ ...formData, use_tts: e.target.checked })}
+                      className="w-4 h-4 text-gray-700 border-gray-300 rounded focus:ring-gray-500"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-gray-700">Usar Texto-para-Áudio (TTS)</span>
+                      <p className="text-xs text-gray-500">Transforme texto em áudio automaticamente</p>
+                    </div>
+                  </label>
+                </div>
               </div>
+
+              {formData.is_test && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone de Teste</label>
+                  <input
+                    type="tel"
+                    value={formData.test_phone}
+                    onChange={(e) => setFormData({ ...formData, test_phone: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                    placeholder="Ex: 55DDD999999999"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Se vazio, envia para o primeiro contato do segmento.</p>
+                </div>
+              )}
 
               {/* Importar Áudio TTS Salvo */}
               {formData.use_tts && (

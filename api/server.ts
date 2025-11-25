@@ -389,6 +389,8 @@ function createTables() {
         email_config_id INTEGER,
         email_subject TEXT,
         email_template_id INTEGER,
+        is_test BOOLEAN DEFAULT 0,
+        test_phone TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`, (err) => {
@@ -397,6 +399,8 @@ function createTables() {
       
       // Adicionar colunas se não existirem (migration)
       // SQLite não permite ADD COLUMN IF NOT EXISTS, então ignoramos erros
+      db.run(`ALTER TABLE campaigns ADD COLUMN is_test BOOLEAN DEFAULT 0`, () => {});
+      db.run(`ALTER TABLE campaigns ADD COLUMN test_phone TEXT`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN channel TEXT DEFAULT 'whatsapp'`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN sms_config_id INTEGER`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN sms_template_id INTEGER`, () => {});
@@ -1061,7 +1065,9 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       email_config_id,
       email_subject,
       email_template_id,
-      media_url
+      media_url,
+      is_test,
+      test_phone
     } = {
       ...bodyData,
       ...req.body
@@ -1146,9 +1152,11 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         email_config_id,
         email_subject,
         email_template_id,
-        media_url
+        media_url,
+        is_test,
+        test_phone
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       name.trim(), 
       finalMessage, 
@@ -1164,7 +1172,9 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       finalEmailConfigId,
       finalEmailSubject,
       finalEmailTemplateId,
-      finalMediaUrl
+      finalMediaUrl,
+      is_test ? 1 : 0,
+      test_phone || null
     ]);
     
     const newCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
@@ -1277,6 +1287,8 @@ app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) =
     setIf('email_template_id', email_template_id);
     setIf('media_url', media_url);
     setIf('status', status);
+    setIf('is_test', req.body.is_test !== undefined ? (req.body.is_test ? 1 : 0) : undefined);
+    setIf('test_phone', req.body.test_phone);
 
     updates.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
@@ -5006,6 +5018,8 @@ app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, r
         c.message_type,
         c.media_url,
         c.target_segment,
+        c.is_test,
+        c.test_phone,
         GROUP_CONCAT(co.id) as contact_ids
       FROM campaigns c
       LEFT JOIN contacts co ON (c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
@@ -5017,7 +5031,20 @@ app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, r
     const results: any[] = [];
     for (const campaign of campaigns) {
       await dbRun(`UPDATE campaigns SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [campaign.id]);
-      const contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
+      let contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
+      if (campaign.is_test) {
+        if (campaign.test_phone && String(campaign.test_phone).trim() !== '') {
+          const phone = normalizePhone(String(campaign.test_phone));
+          let contact = await dbGet('SELECT id FROM contacts WHERE phone = ?', [phone]);
+          if (!contact) {
+            const insert = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, 1)', ['Teste', phone]);
+            contact = { id: insert.lastID } as any;
+          }
+          contactIds = [String(contact.id)];
+        } else {
+          contactIds = contactIds.slice(0, 1);
+        }
+      }
       await processCampaignWithQueue(campaign, contactIds);
       results.push({ id: campaign.id, name: campaign.name });
     }
