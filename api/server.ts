@@ -1021,7 +1021,7 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         c.name,
         c.message as message_template,
         c.message_type,
-        c.status,
+        CASE WHEN c.status = 'draft' AND c.scheduled_at IS NOT NULL THEN 'scheduled' ELSE c.status END as status,
         c.scheduled_at as schedule_time,
         c.use_tts,
         c.tts_config_id,
