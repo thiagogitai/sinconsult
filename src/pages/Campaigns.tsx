@@ -145,28 +145,8 @@ const Campaigns: React.FC = () => {
         type: c.type ?? c.message_type ?? 'text',
         schedule: c.schedule ?? c.scheduled_time ?? c.schedule_time ?? ''
       }));
-      // Buscar estatísticas para cada campanha
-      const withStats = await Promise.all(normalized.map(async (c: any) => {
-        try {
-          const statsResp = await fetch(`/api/campaigns/${c.id}/stats`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-          });
-          if (statsResp.ok) {
-            const stats = await statsResp.json();
-            return {
-              ...c,
-              total_target: stats.total_target,
-              total_sent: stats.total_sent,
-              total_failed: stats.total_failed,
-              total_delivered: stats.total_delivered,
-              total_read: stats.total_read,
-              percentage: stats.percentage
-            };
-          }
-        } catch {}
-        return c;
-      }));
-      setCampaigns(withStats);
+      // Métricas agregadas já vêm do GET /api/campaigns; não buscar /stats aqui
+      setCampaigns(normalized);
     } catch (error) {
       console.error('Erro ao carregar campanhas:', error);
     } finally {
