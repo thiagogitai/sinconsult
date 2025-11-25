@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, 
   Users, 
@@ -28,6 +29,7 @@ import {
 } from 'lucide-react';
 
 const DashboardPremium: React.FC = () => {
+  const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [stats, setStats] = useState<any[]>([]);
   const [recentCampaigns, setRecentCampaigns] = useState<any[]>([]);
@@ -376,19 +378,19 @@ const DashboardPremium: React.FC = () => {
         </div>
         <div className="p-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            <button className="group flex flex-col items-center p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl hover:from-blue-100 hover:to-blue-200 transition-all duration-300 transform hover:scale-105 hover:shadow-lg border border-blue-100">
+            <button onClick={() => navigate('/campaigns')} className="group flex flex-col items-center p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl hover:from-blue-100 hover:to-blue-200 transition-all duration-300 transform hover:scale-105 hover:shadow-lg border border-blue-100">
               <MessageSquare className="h-8 w-8 sm:h-10 sm:w-10 text-blue-600 mb-2 sm:mb-4 group-hover:scale-110 transition-transform" />
               <span className="text-xs sm:text-sm font-black text-blue-900 text-center">Nova Campanha</span>
             </button>
-            <button className="group flex flex-col items-center p-4 sm:p-6 bg-gradient-to-br from-green-50 to-green-100 rounded-2xl hover:from-green-100 hover:to-green-200 transition-all duration-300 transform hover:scale-105 hover:shadow-lg border border-green-100">
+            <button onClick={() => navigate('/import')} className="group flex flex-col items-center p-4 sm:p-6 bg-gradient-to-br from-green-50 to-green-100 rounded-2xl hover:from-green-100 hover:to-green-200 transition-all duration-300 transform hover:scale-105 hover:shadow-lg border border-green-100">
               <Users className="h-8 w-8 sm:h-10 sm:w-10 text-green-600 mb-2 sm:mb-4 group-hover:scale-110 transition-transform" />
               <span className="text-xs sm:text-sm font-black text-green-900 text-center">Importar Contatos</span>
             </button>
-            <button className="group flex flex-col items-center p-4 sm:p-6 bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl hover:from-purple-100 hover:to-purple-200 transition-all duration-300 transform hover:scale-105 hover:shadow-lg border border-purple-100">
+            <button onClick={() => navigate('/whatsapp')} className="group flex flex-col items-center p-4 sm:p-6 bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl hover:from-purple-100 hover:to-purple-200 transition-all duration-300 transform hover:scale-105 hover:shadow-lg border border-purple-100">
               <Phone className="h-8 w-8 sm:h-10 sm:w-10 text-purple-600 mb-2 sm:mb-4 group-hover:scale-110 transition-transform" />
               <span className="text-xs sm:text-sm font-black text-purple-900 text-center">Conectar WhatsApp</span>
             </button>
-            <button className="group flex flex-col items-center p-4 sm:p-6 bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl hover:from-orange-100 hover:to-orange-200 transition-all duration-300 transform hover:scale-105 hover:shadow-lg border border-orange-100">
+            <button onClick={() => navigate('/tts')} className="group flex flex-col items-center p-4 sm:p-6 bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl hover:from-orange-100 hover:to-orange-200 transition-all duration-300 transform hover:scale-105 hover:shadow-lg border border-orange-100">
               <Volume2 className="h-8 w-8 sm:h-10 sm:w-10 text-orange-600 mb-2 sm:mb-4 group-hover:scale-110 transition-transform" />
               <span className="text-xs sm:text-sm font-black text-orange-900 text-center">Configurar TTS</span>
             </button>

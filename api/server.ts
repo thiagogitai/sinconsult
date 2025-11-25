@@ -1792,30 +1792,41 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
     
     for (const row of data) {
       try {
-        // Validar e processar cada linha
-        const name = row['Nome'] || row['name'];
-        const phone = row['Telefone'] || row['phone'];
-        const email = row['Email'] || row['email'];
-        
-        if (!name || !phone) {
+        const pick = (keys: string[]): string => {
+          for (const k of keys) {
+            const v = (row as any)[k];
+            if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+          }
+          return '';
+        };
+        const name = pick(['Nome','name','Name','nome','contact_name']);
+        const rawPhone = pick(['Telefone','phone','Phone','Celular','celular','WhatsApp','whatsapp','Fone','fone','Telefone com DDD','telefone_com_ddd','ddd+telefone']);
+        const email = pick(['Email','email','E-mail','e-mail','mail']);
+        if (!name || !rawPhone) {
           errors++;
-          errorLog.push(`Linha ${processed + 1}: Nome e telefone são obrigatórios`);
+          errorLog.push(`Registro ${processed + errors}: Nome e telefone são obrigatórios`);
+          continue;
+        }
+        const normalizedPhone = normalizePhone(rawPhone);
+        const phoneValidation = validatePhone(normalizedPhone);
+        if (!phoneValidation.isValid) {
+          errors++;
+          errorLog.push(`Registro ${processed + errors}: Telefone inválido (${rawPhone})`);
           continue;
         }
         
-        // Inserir no banco - verificar se já existe
-        const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [phone]);
+        const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
         if (!existing) {
           await dbRun(`
             INSERT INTO contacts (name, phone, email)
             VALUES (?, ?, ?)
-          `, [name, phone, email]);
+          `, [name, normalizedPhone, email || null]);
         }
         
         processed++;
       } catch (error) {
         errors++;
-        errorLog.push(`Linha ${processed + 1}: ${error}`);
+        errorLog.push(`Erro: ${error}`);
       }
     }
     

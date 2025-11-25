@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, 
   Users, 
@@ -24,6 +25,7 @@ import {
 import { analyticsAPI, campaignsAPI, whatsappAPI } from '../services/api';
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [recentCampaigns, setRecentCampaigns] = useState<any[]>([]);
   const [whatsappInstances, setWhatsappInstances] = useState<any[]>([]);
@@ -280,7 +282,7 @@ const Dashboard: React.FC = () => {
                   <Target className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                   <h3 className="text-lg font-medium text-gray-900 mb-1">Nenhuma campanha recente</h3>
                   <p className="text-gray-500">Crie sua primeira campanha para começar a enviar mensagens.</p>
-                  <button className="mt-4 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors">
+                  <button onClick={() => navigate('/campaigns')} className="mt-4 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors">
                     Criar Campanha
                   </button>
                 </div>
