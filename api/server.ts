@@ -2102,6 +2102,97 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
   }
 }));
 
+// Importar contatos lendo um arquivo já existente em /public (requer autenticação)
+app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { filename } = req.body as any;
+    if (!filename || String(filename).trim() === '') {
+      return res.status(400).json({ error: 'Informe o nome do arquivo em public (ex: contatos.xlsx)' });
+    }
+
+    const candidates = [
+      path.resolve(process.cwd(), 'public', filename),
+      path.resolve(__dirname, '../public', filename),
+      path.resolve(__dirname, '../../public', filename)
+    ];
+    let fullPath: string | null = null;
+    for (const p of candidates) {
+      if (fs.existsSync(p)) { fullPath = p; break; }
+    }
+    if (!fullPath) {
+      return res.status(404).json({ error: `Arquivo não encontrado em public: ${filename}` });
+    }
+
+    const workbook = XLSX.readFile(fullPath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet);
+
+    let processed = 0;
+    let errors = 0;
+    const errorLog: string[] = [];
+
+    const normalizeKey = (k: string) => String(k || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9_+]/g, '');
+    const pickFlexible = (rowObj: any, keys: string[]): string => {
+      const targets = keys.map(normalizeKey);
+      for (const rk of Object.keys(rowObj || {})) {
+        const nk = normalizeKey(rk);
+        if (targets.includes(nk)) {
+          const v = rowObj[rk];
+          if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+        }
+      }
+      for (const k of keys) {
+        const v = rowObj[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+      }
+      return '';
+    };
+
+    const nameKeys = ['Nome','name','Name','nome','contact_name','Cliente','cliente','Contato','contato','Nome Completo','nomecompleto'];
+    const phoneKeys = ['Telefone','phone','Phone','Celular','celular','WhatsApp','whatsapp','Fone','fone','Telefone com DDD','telefone_com_ddd','ddd+telefone','DDD+Telefone','DDD+TELEFONE','Numero','Número','numero','número','DDD+Numero','DDD+Número','whatsappcomddd','WhatsApp com DDD'];
+
+    for (let idx = 0; idx < data.length; idx++) {
+      const row: any = data[idx];
+      try {
+        const nameRaw = pickFlexible(row, nameKeys);
+        const nameClean = (nameRaw || '').replace(/[0-9]/g, '').replace(/\s{2,}/g, ' ').trim();
+        const rawPhone = pickFlexible(row, phoneKeys);
+        const email = pickFlexible(row, ['Email','email','E-mail','e-mail','mail']);
+        if (!rawPhone) {
+          errors++;
+          errorLog.push(`Registro ${idx + 1}: Telefone não encontrado`);
+          continue;
+        }
+        const normalizedPhone = normalizePhone(rawPhone);
+        const phoneValidation = validatePhone(normalizedPhone);
+        if (!phoneValidation.isValid) {
+          errors++;
+          errorLog.push(`Registro ${idx + 1}: Telefone inválido (${rawPhone})`);
+          continue;
+        }
+        const finalName = nameClean && nameClean.length > 0 ? nameClean : `Contato ${normalizedPhone}`;
+        const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
+        if (!existing) {
+          await dbRun(`
+            INSERT INTO contacts (name, phone, email, is_active)
+            VALUES (?, ?, ?, 1)
+          `, [finalName, normalizedPhone, email || null]);
+        }
+        processed++;
+      } catch (error) {
+        errors++;
+        errorLog.push(`Registro ${idx + 1}: Erro inesperado`);
+      }
+    }
+
+    res.json({ processed, errors, errorLog: errorLog.slice(0, 10), total: data.length });
+  } catch (error) {
+    logger.error('Erro ao importar do public:', { error });
+    res.status(500).json({ error: 'Erro ao importar dados do public' });
+  }
+}));
+
 // ===== ROTAS DE TEMPLATES =====
 
 // Listar templates (requer autenticação)
