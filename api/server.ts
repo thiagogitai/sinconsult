@@ -2105,7 +2105,7 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
 // Importar contatos lendo um arquivo já existente em /public (requer autenticação)
 app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const { filename } = req.body as any;
+    const { filename, nameCol, phoneCol } = req.body as any;
     if (!filename || String(filename).trim() === '') {
       return res.status(400).json({ error: 'Informe o nome do arquivo em public (ex: contatos.xlsx)' });
     }
@@ -2170,14 +2170,14 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
         if (hasLetters && !hasManyDigits) scoreName[c] += 1;
       }
     }
-    const phoneCol = scorePhone.indexOf(Math.max(...scorePhone));
-    let nameCol = scoreName.indexOf(Math.max(...scoreName));
-    if (scoreName[nameCol] === 0) nameCol = Math.max(0, phoneCol - 1);
+    let pCol = typeof phoneCol === 'number' ? Math.max(0, Number(phoneCol) - 1) : scorePhone.indexOf(Math.max(...scorePhone));
+    let nCol = typeof nameCol === 'number' ? Math.max(0, Number(nameCol) - 1) : scoreName.indexOf(Math.max(...scoreName));
+    if (!Number.isInteger(nCol) || scoreName[nCol] === 0) nCol = Math.max(0, pCol - 1);
 
     for (let idx = 1; idx < rowsCount; idx++) {
       const r: any[] = rows[idx] as any[];
       try {
-        let rawPhone = String(r[phoneCol] ?? '').trim();
+        let rawPhone = String(r[pCol] ?? '').trim();
         if (!rawPhone) {
           rawPhone = '';
           for (let c = 0; c < cols; c++) {
@@ -2198,7 +2198,7 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
           errorLog.push(`Registro ${idx}: Telefone inválido (${rawPhone})`);
           continue;
         }
-        const nameRaw = String(r[nameCol] ?? '').trim();
+        const nameRaw = String(r[nCol] ?? '').trim();
         const nameClean = nameRaw.replace(/[0-9]/g, '').replace(/\s{2,}/g, ' ').trim();
         const finalName = nameClean && nameClean.length > 0 ? nameClean : `Contato ${normalizedPhone}`;
         const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
