@@ -130,7 +130,14 @@ const Campaigns: React.FC = () => {
     try {
       setLoading(true);
       const response = await campaignsAPI.getAll();
-      setCampaigns(response.data.campaigns || []);
+      const raw = response.data?.campaigns || response.data || [];
+      const normalized = (Array.isArray(raw) ? raw : []).map((c: any) => ({
+        ...c,
+        message: c.message ?? c.message_template ?? '',
+        type: c.type ?? c.message_type ?? 'text',
+        schedule: c.schedule ?? c.scheduled_time ?? c.schedule_time ?? ''
+      }));
+      setCampaigns(normalized);
     } catch (error) {
       console.error('Erro ao carregar campanhas:', error);
     } finally {
