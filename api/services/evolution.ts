@@ -58,8 +58,10 @@ class EvolutionAPI {
   private apiKey: string;
 
   constructor() {
-    this.baseURL = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
-    this.apiKey = process.env.EVOLUTION_API_KEY || 'your-api-key';
+    const envUrl = (process.env.EVOLUTION_API_URL || 'http://localhost:8080').trim().replace(/`/g, '').replace(/\/+$/, '');
+    const envKey = (process.env.EVOLUTION_API_KEY || 'your-api-key').trim().replace(/`/g, '');
+    this.baseURL = envUrl;
+    this.apiKey = envKey;
     
     // Validar configuração
     if (!this.apiKey || this.apiKey === 'your-api-key') {
@@ -69,10 +71,12 @@ class EvolutionAPI {
 
   setConfig(baseURL?: string, apiKey?: string) {
     if (baseURL && baseURL.length > 0) {
-      this.baseURL = baseURL;
+      const clean = baseURL.trim().replace(/`/g, '').replace(/\/+$/, '');
+      this.baseURL = clean;
     }
     if (apiKey && apiKey.length > 0) {
-      this.apiKey = apiKey;
+      const cleanKey = apiKey.trim().replace(/`/g, '');
+      this.apiKey = cleanKey;
     }
   }
 

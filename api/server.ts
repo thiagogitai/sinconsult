@@ -48,8 +48,10 @@ async function loadEvolutionConfigFromDB() {
   try {
     const urlRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['evolutionApiUrl', 'api']);
     const keyRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['evolutionApiKey', 'api']);
-    const url = (urlRow && urlRow.value) ? urlRow.value : process.env.EVOLUTION_API_URL;
-    const key = (keyRow && keyRow.value) ? keyRow.value : process.env.EVOLUTION_API_KEY;
+    const rawUrl = (urlRow && urlRow.value) ? urlRow.value : process.env.EVOLUTION_API_URL;
+    const rawKey = (keyRow && keyRow.value) ? keyRow.value : process.env.EVOLUTION_API_KEY;
+    const url = String(rawUrl || '').trim().replace(/`/g, '').replace(/\/+$/, '');
+    const key = String(rawKey || '').trim().replace(/`/g, '');
     
     // Atualizar variáveis de ambiente
     if (url) {
