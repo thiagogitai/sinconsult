@@ -16,19 +16,19 @@ const Schedules: React.FC = () => {
     try {
       setLoading(true);
       const response = await campaignsAPI.getAll();
-      const campaigns = response.data || [];
+      const campaigns = response.data?.campaigns || response.data || [];
       
       // Filtrar apenas campanhas agendadas
-      const scheduled = campaigns
-        .filter((c: any) => c.schedule_time && c.status === 'scheduled')
+      const scheduled = (Array.isArray(campaigns) ? campaigns : [])
+        .filter((c: any) => (c.scheduled_time || c.schedule_time || c.scheduled_at) && c.status === 'scheduled')
         .map((c: any) => ({
           id: c.id,
           name: c.name,
-          time: new Date(c.schedule_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          date: new Date(c.schedule_time).toLocaleDateString('pt-BR'),
+          time: new Date(c.scheduled_time || c.schedule_time || c.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(c.scheduled_time || c.schedule_time || c.scheduled_at).toLocaleDateString('pt-BR'),
           status: c.status,
           lastRun: null,
-          nextRun: c.schedule_time,
+          nextRun: c.scheduled_time || c.schedule_time || c.scheduled_at,
           frequency: 'Única',
           channel: c.channel || 'whatsapp'
         }));
