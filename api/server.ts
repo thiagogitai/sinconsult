@@ -4740,14 +4740,17 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
                 delay: messageDelay
               });
               sent = true;
-            } else if (campaign.message_type === 'audio' && campaign.media_url) {
-              await evolutionAPI.sendAudio(instance.instance_id, {
-                number: contact.phone,
-                audio: campaign.media_url,
-                delay: messageDelay,
-                ptt: true
-              });
-              sent = true;
+            } else if (campaign.message_type === 'audio') {
+              const audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
+              if (audioUrl) {
+                await evolutionAPI.sendAudio(instance.instance_id, {
+                  number: contact.phone,
+                  audio: audioUrl,
+                  delay: messageDelay,
+                  ptt: true
+                });
+                sent = true;
+              }
             }
             
             if (sent) {

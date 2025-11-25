@@ -118,7 +118,10 @@ const Campaigns: React.FC = () => {
 
   const fetchSavedTTSFiles = async () => {
     try {
-      const response = await fetch('/api/tts/files');
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/tts/files', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
+      });
       const data = await response.json();
       if (response.ok) {
         setSavedTTSFiles(data.files || []);
@@ -265,9 +268,10 @@ const Campaigns: React.FC = () => {
       });
       setMediaPreview(null);
       fetchCampaigns();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar campanha:', error);
-      alert('Erro ao criar campanha. Tente novamente.');
+      const msg = error?.response?.data?.error || error?.message || 'Erro ao criar campanha';
+      alert(msg);
     }
   };
 
