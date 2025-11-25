@@ -2105,7 +2105,7 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
 // Importar contatos lendo um arquivo já existente em /public (requer autenticação)
 app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const { filename, nameCol, phoneCol, sheetIndex, sheetName } = req.body as any;
+    const { filename, nameCol, phoneCol, sheetIndex, sheetName, tag } = req.body as any;
     if (!filename || String(filename).trim() === '') {
       return res.status(400).json({ error: 'Informe o nome do arquivo em public (ex: contatos.xlsx)' });
     }
@@ -2198,6 +2198,17 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
     let nCol = typeof nameCol === 'number' ? Math.max(0, Number(nameCol) - 1) : scoreName.indexOf(Math.max(...scoreName));
     if (!Number.isInteger(nCol) || scoreName[nCol] === 0) nCol = Math.max(0, pCol - 1);
 
+    // Tag derivada
+    const deriveTag = () => {
+      if (tag && String(tag).trim()) return String(tag).trim().toLowerCase();
+      const fname = filename.toLowerCase();
+      if (fname.includes('analise') || fname.includes('análise') || fname.includes('tendencia') || fname.includes('tendência')) return 'analises-tendencias';
+      if (fname.includes('lista') && fname.includes('transmissao')) return 'preco';
+      if (fname.includes('preco') || fname.includes('preço')) return 'preco';
+      return '';
+    };
+    const defaultTag = deriveTag();
+
     for (let idx = 1; idx < rowsCount; idx++) {
       const r: any[] = rows[idx] as any[];
       try {
@@ -2225,12 +2236,14 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
         const nameRaw = String(r[nCol] ?? '').trim();
         const nameClean = nameRaw.replace(/[0-9]/g, '').replace(/\s{2,}/g, ' ').trim();
         const finalName = nameClean && nameClean.length > 0 ? nameClean : `Contato ${normalizedPhone}`;
-        const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
+        const existing = await dbGet('SELECT id, segment FROM contacts WHERE phone = ?', [normalizedPhone]);
         if (!existing) {
           await dbRun(`
-            INSERT INTO contacts (name, phone, email, is_active)
-            VALUES (?, ?, ?, 1)
-          `, [finalName, normalizedPhone, null]);
+            INSERT INTO contacts (name, phone, email, segment, is_active)
+            VALUES (?, ?, ?, ?, 1)
+          `, [finalName, normalizedPhone, null, defaultTag || null]);
+        } else if (defaultTag && (!existing.segment || String(existing.segment).trim() === '')) {
+          await dbRun('UPDATE contacts SET segment = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [defaultTag, existing.id]);
         }
         processed++;
       } catch {
