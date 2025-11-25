@@ -2126,7 +2126,7 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
     const workbook = XLSX.readFile(fullPath);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet);
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
     let processed = 0;
     let errors = 0;
@@ -2149,40 +2149,69 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
       return '';
     };
 
-    const nameKeys = ['Nome','name','Name','nome','contact_name','Cliente','cliente','Contato','contato','Nome Completo','nomecompleto'];
-    const phoneKeys = ['Telefone','phone','Phone','Celular','celular','WhatsApp','whatsapp','Fone','fone','Telefone com DDD','telefone_com_ddd','ddd+telefone','DDD+Telefone','DDD+TELEFONE','Numero','Número','numero','número','DDD+Numero','DDD+Número','whatsappcomddd','WhatsApp com DDD'];
+    const rowsCount = Array.isArray(rows) ? rows.length : 0;
+    if (rowsCount === 0) {
+      return res.json({ processed: 0, errors: 0, errorLog: [], total: 0 });
+    }
 
-    for (let idx = 0; idx < data.length; idx++) {
-      const row: any = data[idx];
+    const cols = Math.max(...rows.map((r: any[]) => r.length));
+    const scorePhone: number[] = Array.from({ length: cols }, () => 0);
+    const scoreName: number[] = Array.from({ length: cols }, () => 0);
+    const sampleLimit = Math.min(rowsCount, 100);
+    for (let i = 0; i < sampleLimit; i++) {
+      const r: any[] = rows[i] as any[];
+      for (let c = 0; c < cols; c++) {
+        const v = String(r[c] ?? '').trim();
+        if (!v) continue;
+        const digits = v.replace(/\D/g, '');
+        if (digits.length >= 10 && digits.length <= 13) scorePhone[c] += 1;
+        const hasLetters = /[A-Za-zÀ-ÿ]/.test(v);
+        const hasManyDigits = digits.length > 4;
+        if (hasLetters && !hasManyDigits) scoreName[c] += 1;
+      }
+    }
+    const phoneCol = scorePhone.indexOf(Math.max(...scorePhone));
+    let nameCol = scoreName.indexOf(Math.max(...scoreName));
+    if (scoreName[nameCol] === 0) nameCol = Math.max(0, phoneCol - 1);
+
+    for (let idx = 1; idx < rowsCount; idx++) {
+      const r: any[] = rows[idx] as any[];
       try {
-        const nameRaw = pickFlexible(row, nameKeys);
-        const nameClean = (nameRaw || '').replace(/[0-9]/g, '').replace(/\s{2,}/g, ' ').trim();
-        const rawPhone = pickFlexible(row, phoneKeys);
-        const email = pickFlexible(row, ['Email','email','E-mail','e-mail','mail']);
+        let rawPhone = String(r[phoneCol] ?? '').trim();
+        if (!rawPhone) {
+          rawPhone = '';
+          for (let c = 0; c < cols; c++) {
+            const v = String(r[c] ?? '').trim();
+            const d = v.replace(/\D/g, '');
+            if (d.length >= 10 && d.length <= 13) { rawPhone = v; break; }
+          }
+        }
         if (!rawPhone) {
           errors++;
-          errorLog.push(`Registro ${idx + 1}: Telefone não encontrado`);
+          errorLog.push(`Registro ${idx}: Telefone não encontrado`);
           continue;
         }
         const normalizedPhone = normalizePhone(rawPhone);
         const phoneValidation = validatePhone(normalizedPhone);
         if (!phoneValidation.isValid) {
           errors++;
-          errorLog.push(`Registro ${idx + 1}: Telefone inválido (${rawPhone})`);
+          errorLog.push(`Registro ${idx}: Telefone inválido (${rawPhone})`);
           continue;
         }
+        const nameRaw = String(r[nameCol] ?? '').trim();
+        const nameClean = nameRaw.replace(/[0-9]/g, '').replace(/\s{2,}/g, ' ').trim();
         const finalName = nameClean && nameClean.length > 0 ? nameClean : `Contato ${normalizedPhone}`;
         const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
         if (!existing) {
           await dbRun(`
             INSERT INTO contacts (name, phone, email, is_active)
             VALUES (?, ?, ?, 1)
-          `, [finalName, normalizedPhone, email || null]);
+          `, [finalName, normalizedPhone, null]);
         }
         processed++;
-      } catch (error) {
+      } catch {
         errors++;
-        errorLog.push(`Registro ${idx + 1}: Erro inesperado`);
+        errorLog.push(`Registro ${idx}: Erro inesperado`);
       }
     }
 
