@@ -2259,6 +2259,28 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
   }
 }));
 
+// Listar arquivos disponíveis em /public para importação
+app.get('/api/import/public/list', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const candidates = [
+      path.resolve(process.cwd(), 'public'),
+      path.resolve(__dirname, '../public'),
+      path.resolve(__dirname, '../../public')
+    ];
+    let dir: string | null = null;
+    for (const p of candidates) {
+      if (fs.existsSync(p)) { dir = p; break; }
+    }
+    if (!dir) return res.json({ files: [] });
+    const all = fs.readdirSync(dir);
+    const files = all.filter(f => /\.(xlsx|xls|csv)$/i.test(f));
+    res.json({ files });
+  } catch (error) {
+    logger.error('Erro ao listar arquivos de public:', { error });
+    res.status(500).json({ error: 'Erro ao listar arquivos' });
+  }
+}));
+
 // ===== ROTAS DE TEMPLATES =====
 
 // Listar templates (requer autenticação)
