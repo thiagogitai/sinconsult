@@ -1348,6 +1348,40 @@ app.post('/api/campaigns/:id/stop', authenticateToken, asyncHandler(async (req, 
   }
 }));
 
+app.get('/api/campaigns/:id/messages', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params as any;
+    const { status, limit } = req.query as any;
+    const lim = Number(limit) > 0 ? Number(limit) : 100;
+    let where = 'WHERE m.campaign_id = ?';
+    const params: any[] = [id];
+    if (status && status !== 'all') {
+      where += ' AND m.status = ?';
+      params.push(status);
+    }
+    params.push(lim);
+    const rows = await dbAll(`
+      SELECT 
+        m.id as message_id,
+        m.status,
+        m.sent_at,
+        m.delivered_at,
+        m.read_at,
+        m.error_message,
+        c.name,
+        c.phone
+      FROM messages m
+      JOIN contacts c ON c.id = m.contact_id
+      ${where}
+      ORDER BY COALESCE(m.delivered_at, m.read_at, m.sent_at, m.created_at) DESC
+      LIMIT ?
+    `, params);
+    res.json({ success: true, messages: rows });
+  } catch (error: any) {
+    logger.error('Erro ao listar mensagens da campanha:', { error: error.message });
+    res.status(500).json({ success: false, error: 'Erro ao listar mensagens' });
+  }
+}));
 // Estatísticas da campanha (requer autenticação)
 app.get('/api/campaigns/:id/stats', authenticateToken, asyncHandler(async (req, res) => {
   try {

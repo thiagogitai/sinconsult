@@ -639,17 +639,27 @@ const Campaigns: React.FC = () => {
                       <button
                         onClick={async () => {
                           try {
-                            const statsResp = await fetch(`/api/campaigns/${campaign.id}/stats`, {
-                              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                            const token = localStorage.getItem('token');
+                            const deliveredResp = await fetch(`/api/campaigns/${campaign.id}/messages?status=delivered`, {
+                              headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
                             });
-                            if (statsResp.ok) {
-                              const stats = await statsResp.json();
-                              setStatsCampaignName(campaign.name);
-                              setStatsModalData(stats);
-                              setStatsModalOpen(true);
-                            } else {
-                              alert('Erro ao carregar estatísticas');
-                            }
+                            const failedResp = await fetch(`/api/campaigns/${campaign.id}/messages?status=failed`, {
+                              headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
+                            });
+                            const deliveredData = deliveredResp.ok ? await deliveredResp.json() : { messages: [] };
+                            const failedData = failedResp.ok ? await failedResp.json() : { messages: [] };
+                            setStatsCampaignName(campaign.name);
+                            setStatsModalData({
+                              success: true,
+                              total_target: campaign.total_target || 0,
+                              total_sent: campaign.total_sent || 0,
+                              total_delivered: campaign.total_delivered || 0,
+                              total_read: campaign.total_read || 0,
+                              total_failed: campaign.total_failed || 0,
+                              delivered: deliveredData.messages || [],
+                              failed: failedData.messages || []
+                            });
+                            setStatsModalOpen(true);
                           } catch (e) {
                             alert('Erro ao carregar estatísticas');
                           }
