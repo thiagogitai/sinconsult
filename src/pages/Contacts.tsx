@@ -69,7 +69,10 @@ const Contacts: React.FC = () => {
             ? (Array.isArray(contact.tags) 
                 ? contact.tags 
                 : (contact.tags.split ? contact.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t) : []))
-            : []
+            : [],
+          status: (!contact.is_blocked && (contact.is_active === 1 || contact.is_active === true || contact.is_active === undefined)) 
+            ? 'active' 
+            : 'cancelled'
         }));
         setContacts(normalizedContacts);
       } else {

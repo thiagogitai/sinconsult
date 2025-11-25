@@ -1129,12 +1129,14 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       media_url: finalMediaUrl
     });
     
+    const initialStatus = finalScheduleTime ? 'scheduled' : 'draft';
     const result = await dbRun(`
       INSERT INTO campaigns (
         name, 
         message, 
         message_type, 
         scheduled_at, 
+        status,
         use_tts, 
         tts_config_id, 
         tts_audio_file,
@@ -1146,12 +1148,13 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         email_template_id,
         media_url
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       name.trim(), 
       finalMessage, 
       message_type || 'text', 
       finalScheduleTime, 
+      initialStatus,
       use_tts || false, 
       finalTtsConfigId, 
       finalTtsAudioFile,
