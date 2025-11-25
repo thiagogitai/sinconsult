@@ -1791,6 +1791,18 @@ app.post('/api/contacts', authenticateToken, validate(schemas.createContact), as
   }
 }));
 
+app.delete('/api/contacts/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params as any;
+    await dbRun('DELETE FROM messages WHERE contact_id = ?', [id]);
+    const result = await dbRun('DELETE FROM contacts WHERE id = ?', [id]);
+    res.json({ success: true, deleted: result?.changes || 0 });
+  } catch (error) {
+    logger.error('Erro ao excluir contato:', { error });
+    throw error;
+  }
+}));
+
 // ===== ROTAS DE SEGMENTOS =====
 
 // Listar segmentos (requer autenticação)
