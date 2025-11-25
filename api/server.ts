@@ -155,7 +155,8 @@ function buildAbsoluteUrl(url: string, req?: Request): string {
   if (/^https?:\/\//i.test(u)) return u;
   const base = getPublicBaseUrl(req);
   const cleanBase = base.replace(/\/+$/, '');
-  const rel = u.startsWith('/') ? u : `/${u}`;
+  let rel = u.startsWith('/') ? u : `/${u}`;
+  if (rel.startsWith('/uploads/')) rel = `/api${rel}`;
   return `${cleanBase}${rel}`;
 }
 
@@ -192,6 +193,7 @@ if (!fs.existsSync(uploadsPath)) {
   }
 }
 app.use('/uploads', express.static(uploadsPath));
+app.use('/api/uploads', express.static(uploadsPath));
 logger.info('✅ Servindo arquivos de upload de:', uploadsPath);
 
 // Rate limiting global
@@ -1923,7 +1925,7 @@ app.post('/api/upload/image', authenticateToken, uploadImage.single('image'), as
       });
     }
     
-    const imageUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req as Request);
+    const imageUrl = buildAbsoluteUrl(`/api/uploads/${req.file.filename}`, req as Request);
     
     res.json({
       success: true,
@@ -1954,7 +1956,7 @@ app.post('/api/upload/video', authenticateToken, uploadVideo.single('video'), as
       });
     }
     
-    const videoUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req as Request);
+    const videoUrl = buildAbsoluteUrl(`/api/uploads/${req.file.filename}`, req as Request);
     
     res.json({
       success: true,
@@ -2008,7 +2010,7 @@ app.post('/api/upload/media', authenticateToken, (req, res, next) => {
       });
     }
     
-    const mediaUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req as Request);
+    const mediaUrl = buildAbsoluteUrl(`/api/uploads/${req.file.filename}`, req as Request);
     
     logger.info('Upload de mídia concluído com sucesso', { url: mediaUrl });
     
