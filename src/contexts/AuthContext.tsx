@@ -112,7 +112,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAuth(prev => ({ ...prev, user, token, error: null }))
       return true
     } catch {
-      await logout()
+      // Não derrubar a sessão imediatamente; manter token/localStorage
+      // para evitar bounce na UI quando o backend estiver temporariamente indisponível
+      setAuth(prev => ({ ...prev, loading: false }))
       return false
     }
   }, [auth.token, verifyToken])
