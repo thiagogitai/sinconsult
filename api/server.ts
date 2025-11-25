@@ -5113,6 +5113,15 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
                 delay: messageDelay
               });
               sent = true;
+            } else if (campaign.message_type === 'video' && campaign.media_url) {
+              const videoUrl = buildAbsoluteUrl(campaign.media_url);
+              resp = await evolutionAPI.sendVideo(instance.instance_id, {
+                number: contact.phone,
+                media: videoUrl,
+                caption: campaign.message_template,
+                delay: messageDelay
+              });
+              sent = true;
             } else if (campaign.message_type === 'audio') {
               let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
               if (audioUrl) {
