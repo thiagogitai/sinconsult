@@ -1144,15 +1144,22 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       }
     }
     
+    let normalizedSchedule: string | null = null;
+    if (finalScheduleTime && typeof finalScheduleTime === 'string') {
+      const s = finalScheduleTime.replace('T', ' ').trim();
+      normalizedSchedule = s.length === 16 ? `${s}:00` : s;
+    }
+    const requestedStatus = (req.body as any).status;
+    const initialStatus = (requestedStatus === 'scheduled' || !!normalizedSchedule) ? 'scheduled' : 'draft';
+    
     logger.info('Dados finais para inserção:', {
       name,
       message: finalMessage,
       message_type: message_type || 'text',
-      scheduled_at: finalScheduleTime,
-      media_url: finalMediaUrl
+      scheduled_at: normalizedSchedule,
+      media_url: finalMediaUrl,
+      status: initialStatus
     });
-    
-    const initialStatus = finalScheduleTime ? 'scheduled' : 'draft';
     const result = await dbRun(`
       INSERT INTO campaigns (
         name, 
@@ -1178,7 +1185,7 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       name.trim(), 
       finalMessage, 
       message_type || 'text', 
-      finalScheduleTime, 
+      normalizedSchedule, 
       initialStatus,
       use_tts || false, 
       finalTtsConfigId, 
