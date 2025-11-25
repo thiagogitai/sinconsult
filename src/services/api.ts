@@ -53,9 +53,10 @@ export const contactsAPI = {
     api.put(`/contacts/${id}`, contact),
   delete: (id: string) =>
     api.delete(`/contacts/${id}`),
-  importExcel: (file: File) => {
+  importExcel: (file: File, tag?: string) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (tag) formData.append('tag', tag);
     return api.post('/import/excel', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

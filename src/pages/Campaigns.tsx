@@ -52,6 +52,8 @@ const Campaigns: React.FC = () => {
   const [statsModalOpen, setStatsModalOpen] = useState(false);
   const [statsModalData, setStatsModalData] = useState<any | null>(null);
   const [statsCampaignName, setStatsCampaignName] = useState<string>('');
+  const [copiedPhones, setCopiedPhones] = useState(false);
+  const [copiedRows, setCopiedRows] = useState(false);
 
   useEffect(() => {
     fetchCampaigns();
@@ -1108,6 +1110,72 @@ const Campaigns: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-semibold text-gray-700">Dados (Nome, Telefone, Entregue, Lido)</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const rows = (statsModalData.delivered || []).map((r: any) => [String(r.name||'').trim(), String(r.phone||'').trim(), String(r.delivered_at||'').trim()||'-', String(r.read_at||'').trim()||'-']);
+                      const header = ['Nome','Telefone','Entregue','Lido'];
+                      const tsv = [header.join('\t'), ...rows.map(rr => rr.join('\t'))].join('\n');
+                      navigator.clipboard.writeText(tsv);
+                      setCopiedRows(true);
+                      setTimeout(() => setCopiedRows(false), 2000);
+                    }}
+                    className="text-xs px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  >
+                    {copiedRows ? 'Copiado' : 'Copiar'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const rows = (statsModalData.delivered || []).map((r: any) => [String(r.name||'').trim(), String(r.phone||'').trim(), String(r.delivered_at||'').trim()||'-', String(r.read_at||'').trim()||'-']);
+                      const header = ['Nome','Telefone','Entregue','Lido'];
+                      const csv = [header.join(','), ...rows.map(rr => rr.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `entregas_${statsCampaignName || 'campanha'}.csv`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="text-xs px-3 py-1 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-700"
+                  >
+                    Baixar CSV
+                  </button>
+                </div>
+              </div>
+              <div className="border rounded-lg p-3 bg-gray-50 max-h-40 overflow-y-auto text-sm text-gray-800">
+                {(() => {
+                  const rows = (statsModalData.delivered || []).map((r: any) => [String(r.name||'').trim(), String(r.phone||'').trim(), String(r.delivered_at||'').trim()||'-', String(r.read_at||'').trim()||'-']);
+                  const header = ['Nome','Telefone','Entregue','Lido'];
+                  const view = [header.join(' \t '), ...rows.map(rr => rr.join(' \t '))].join('\n');
+                  return view || 'Nenhum dado disponível';
+                })()}
+              </div>
+            </div>
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-semibold text-gray-700">Números de telefone</div>
+                <button
+                  onClick={() => {
+                    const phones = Array.from(new Set((statsModalData.delivered || []).map((r: any) => String(r.phone || '').trim()).filter((p: string) => p)));
+                    navigator.clipboard.writeText(phones.join('\n'));
+                    setCopiedPhones(true);
+                    setTimeout(() => setCopiedPhones(false), 2000);
+                  }}
+                  className="text-xs px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+                >
+                  {copiedPhones ? 'Copiado' : 'Copiar'}
+                </button>
+              </div>
+              <div className="border rounded-lg p-3 bg-gray-50 max-h-40 overflow-y-auto text-sm text-gray-800">
+                {Array.from(new Set((statsModalData.delivered || []).map((r: any) => String(r.phone || '').trim()).filter((p: string) => p))).join('\n') || 'Nenhum número disponível'}
               </div>
             </div>
           </div>

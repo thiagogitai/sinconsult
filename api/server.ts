@@ -1,4 +1,5 @@
 import express from 'express';
+import type { Request } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -139,6 +140,25 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+function getPublicBaseUrl(req?: Request): string {
+  const envUrl = (process.env.PUBLIC_BASE_URL || '').trim();
+  if (envUrl) return envUrl.replace(/\/+$/, '');
+  const xfProto = (req?.headers['x-forwarded-proto'] as string) || '';
+  const xfHost = (req?.headers['x-forwarded-host'] as string) || '';
+  const proto = (xfProto || req?.protocol || 'http').replace(/\/+$/, '');
+  const host = (xfHost || req?.get('host') || `localhost:${process.env.PORT || 3006}`).replace(/\/+$/, '');
+  return `${proto}://${host}`;
+}
+
+function buildAbsoluteUrl(url: string, req?: Request): string {
+  const u = String(url || '');
+  if (/^https?:\/\//i.test(u)) return u;
+  const base = getPublicBaseUrl(req);
+  const cleanBase = base.replace(/\/+$/, '');
+  const rel = u.startsWith('/') ? u : `/${u}`;
+  return `${cleanBase}${rel}`;
+}
+
 // Servir arquivos estáticos do frontend
 // __dirname em produção: dist-server/api
 // Precisamos ir para a raiz do projeto e então para dist/
@@ -163,12 +183,16 @@ if (fs.existsSync(distPath)) {
 
 // Servir arquivos de upload
 const uploadsPath = path.join(projectRoot, 'uploads');
-if (fs.existsSync(uploadsPath)) {
-  app.use('/uploads', express.static(uploadsPath));
-  logger.info('✅ Servindo arquivos de upload de:', uploadsPath);
-} else {
-  logger.warn('⚠️  Pasta uploads/ não encontrada em:', uploadsPath);
+if (!fs.existsSync(uploadsPath)) {
+  try {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+    logger.info('✅ Pasta uploads criada em:', uploadsPath);
+  } catch (e) {
+    logger.warn('⚠️  Falha ao criar pasta uploads:', { uploadsPath, error: e });
+  }
 }
+app.use('/uploads', express.static(uploadsPath));
+logger.info('✅ Servindo arquivos de upload de:', uploadsPath);
 
 // Rate limiting global
 app.use(defaultRateLimiter);
@@ -1094,8 +1118,8 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
     const finalMessage = (message_template || message || '').trim();
     const finalScheduleTime = schedule_time || scheduled_at || null;
     
-    // Verificar se há media_url no body (pode ser URL de imagem já enviada)
-    const finalMediaUrl = media_url || bodyData.media_url || req.body.media_url || null;
+    const rawMediaUrl = media_url || bodyData.media_url || req.body.media_url || null;
+    const finalMediaUrl = rawMediaUrl ? buildAbsoluteUrl(String(rawMediaUrl), req as Request) : null;
     
     // Converter strings vazias para null nos campos opcionais
     const finalTtsConfigId = tts_config_id && tts_config_id.toString().trim() ? tts_config_id : null;
@@ -1318,7 +1342,8 @@ app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) =
     setIf('email_config_id', email_config_id);
     setIf('email_subject', email_subject);
     setIf('email_template_id', email_template_id);
-    setIf('media_url', media_url);
+    const mediaToSet = media_url !== undefined ? (media_url ? buildAbsoluteUrl(String(media_url), req as Request) : null) : undefined;
+    setIf('media_url', mediaToSet);
     if (status !== undefined) {
       setIf('status', status);
     } else if (schedNorm) {
@@ -1898,8 +1923,7 @@ app.post('/api/upload/image', authenticateToken, uploadImage.single('image'), as
       });
     }
     
-    // Retornar URL da imagem
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const imageUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req as Request);
     
     res.json({
       success: true,
@@ -1930,8 +1954,7 @@ app.post('/api/upload/video', authenticateToken, uploadVideo.single('video'), as
       });
     }
     
-    // Retornar URL do vídeo
-    const videoUrl = `/uploads/${req.file.filename}`;
+    const videoUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req as Request);
     
     res.json({
       success: true,
@@ -1985,8 +2008,7 @@ app.post('/api/upload/media', authenticateToken, (req, res, next) => {
       });
     }
     
-    // Retornar URL da mídia
-    const mediaUrl = `/uploads/${req.file.filename}`;
+    const mediaUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req as Request);
     
     logger.info('Upload de mídia concluído com sucesso', { url: mediaUrl });
     
@@ -2053,7 +2075,11 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
     const nameKeys = ['Nome','name','Name','nome','contact_name','Cliente','cliente','Contato','contato','Nome Completo','nomecompleto'];
     const phoneKeys = ['Telefone','phone','Phone','Celular','celular','WhatsApp','whatsapp','Fone','fone','Telefone com DDD','telefone_com_ddd','ddd+telefone','DDD+Telefone','DDD+TELEFONE','Numero','Número','numero','número','DDD+Numero','DDD+Número','whatsappcomddd','WhatsApp com DDD'];
 
-    data.forEach(async (row: any, idx: number) => {
+    const tagRaw = (req.query.tag as string) || (req.body?.tag as string) || '';
+    const tag = tagRaw ? String(tagRaw).trim().toLowerCase() : '';
+
+    for (let idx = 0; idx < data.length; idx++) {
+      const row: any = data[idx];
       try {
         const nameRaw = pickFlexible(row, nameKeys);
         const nameClean = (nameRaw || '').replace(/[0-9]/g, '').replace(/\s{2,}/g, ' ').trim();
@@ -2062,39 +2088,36 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
         if (!rawPhone) {
           errors++;
           errorLog.push(`Registro ${idx + 1}: Telefone não encontrado`);
-          return;
+          continue;
         }
         const normalizedPhone = normalizePhone(rawPhone);
         const phoneValidation = validatePhone(normalizedPhone);
         if (!phoneValidation.isValid) {
           errors++;
           errorLog.push(`Registro ${idx + 1}: Telefone inválido (${rawPhone})`);
-          return;
+          continue;
         }
         const finalName = nameClean && nameClean.length > 0 ? nameClean : `Contato ${normalizedPhone}`;
-        const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
+        const existing = await dbGet('SELECT id, segment FROM contacts WHERE phone = ?', [normalizedPhone]);
         if (!existing) {
           await dbRun(`
-            INSERT INTO contacts (name, phone, email, is_active)
-            VALUES (?, ?, ?, 1)
-          `, [finalName, normalizedPhone, email || null]);
+            INSERT INTO contacts (name, phone, email, segment, is_active)
+            VALUES (?, ?, ?, ?, 1)
+          `, [finalName, normalizedPhone, email || null, tag || null]);
+        } else if (tag && (!existing.segment || String(existing.segment).trim() === '')) {
+          await dbRun('UPDATE contacts SET segment = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [tag, existing.id]);
         }
         processed++;
       } catch (error) {
         errors++;
         errorLog.push(`Registro ${idx + 1}: Erro inesperado`);
       }
-    });
+    }
     
     // Limpar arquivo temporário
     fs.unlinkSync(req.file.path);
     
-    res.json({
-      processed,
-      errors,
-      errorLog: errorLog.slice(0, 10), // Limitar a 10 erros no retorno
-      total: data.length
-    });
+    res.json({ processed, errors, errorLog: errorLog.slice(0, 10), total: Math.max(rowsCount - 1, 0) });
     
   } catch (error) {
     logger.error('Erro ao processar Excel:', { error });
@@ -2181,7 +2204,7 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
     const cols = Math.max(...rows.map((r: any[]) => r.length));
     const scorePhone: number[] = Array.from({ length: cols }, () => 0);
     const scoreName: number[] = Array.from({ length: cols }, () => 0);
-    const sampleLimit = Math.min(rowsCount, 100);
+    const sampleLimit = rowsCount;
     for (let i = 0; i < sampleLimit; i++) {
       const r: any[] = rows[i] as any[];
       for (let c = 0; c < cols; c++) {
@@ -5078,16 +5101,18 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
               });
               sent = true;
             } else if (campaign.message_type === 'image' && campaign.media_url) {
+              const mediaUrl = buildAbsoluteUrl(campaign.media_url);
               resp = await evolutionAPI.sendImage(instance.instance_id, {
                 number: contact.phone,
-                media: campaign.media_url,
+                media: mediaUrl,
                 caption: campaign.message_template,
                 delay: messageDelay
               });
               sent = true;
             } else if (campaign.message_type === 'audio') {
-              const audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
+              let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
               if (audioUrl) {
+                audioUrl = buildAbsoluteUrl(audioUrl);
                 resp = await evolutionAPI.sendAudio(instance.instance_id, {
                   number: contact.phone,
                   audio: audioUrl,

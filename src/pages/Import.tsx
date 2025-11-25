@@ -16,6 +16,7 @@ const Import: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [tag, setTag] = useState('');
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -46,7 +47,7 @@ const Import: React.FC = () => {
       }, 200);
 
       // Fazer upload do arquivo
-      const response = await contactsAPI.importExcel(file);
+      const response = await contactsAPI.importExcel(file, tag ? tag.trim().toLowerCase() : undefined);
       
       clearInterval(progressInterval);
       setUploadProgress(100);
@@ -181,6 +182,20 @@ const Import: React.FC = () => {
                   </p>
                 </>
               )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Tag/Segmento</label>
+                <input
+                  type="text"
+                  value={tag}
+                  onChange={(e) => setTag(e.target.value)}
+                  placeholder="Ex: preco, analises-tendencias"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                />
+                <p className="text-xs text-gray-500 mt-1">Opcional. Aplicada aos contatos importados.</p>
+              </div>
             </div>
 
             {/* Instructions */}
