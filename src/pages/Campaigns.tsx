@@ -507,7 +507,9 @@ const Campaigns: React.FC = () => {
                 email_config_id: '',
                 email_subject: '',
                 email_template_id: '',
-                media_url: ''
+                media_url: '',
+                is_test: false,
+                test_phone: ''
               });
               setMediaPreview(null);
               setShowModal(true);
