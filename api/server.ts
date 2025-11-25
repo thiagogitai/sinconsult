@@ -5082,7 +5082,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
       return;
     }
     
-    logger.info(`Usando instância: ${instance.name} (${instance.phone_connected})`);
+    logger.info(`Usando instância: ${instance.name || instance.instance_id} (${instance.phone_connected})`);
     
     // Processar em lotes para evitar bloqueio
     const batchSize = 10; // Enviar de 10 em 10 contatos
@@ -5124,7 +5124,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
           try {
             let resp: any = null;
             if (campaign.message_type === 'text') {
-              resp = await evolutionAPI.sendTextMessage(instance.instance_id, {
+              resp = await evolutionAPI.sendTextMessage(instance.name || instance.instance_id, {
                 number: contact.phone,
                 text: campaign.message_template,
                 delay: messageDelay
@@ -5132,7 +5132,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
               sent = true;
             } else if (campaign.message_type === 'image' && campaign.media_url) {
               const mediaUrl = buildAbsoluteUrl(campaign.media_url);
-              resp = await evolutionAPI.sendImage(instance.instance_id, {
+              resp = await evolutionAPI.sendImage(instance.name || instance.instance_id, {
                 number: contact.phone,
                 media: mediaUrl,
                 caption: campaign.message_template,
@@ -5152,7 +5152,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
               let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
               if (audioUrl) {
                 audioUrl = buildAbsoluteUrl(audioUrl);
-                resp = await evolutionAPI.sendAudio(instance.instance_id, {
+                resp = await evolutionAPI.sendAudio(instance.name || instance.instance_id, {
                   number: contact.phone,
                   audio: audioUrl,
                   delay: messageDelay,
