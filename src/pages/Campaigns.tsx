@@ -246,7 +246,8 @@ const Campaigns: React.FC = () => {
         email_template_id: formData.channel === 'email' ? formData.email_template_id : null,
         media_url: formData.media_url || null,
         is_test: formData.is_test,
-        test_phone: formData.is_test ? formData.test_phone : null
+        test_phone: formData.is_test ? formData.test_phone : null,
+        status: formData.schedule ? 'scheduled' : undefined
       };
 
       await campaignsAPI.create(campaignData);
@@ -319,7 +320,8 @@ const Campaigns: React.FC = () => {
         tts_config_id: formData.use_tts ? formData.tts_config_id : null,
         tts_audio_file: formData.use_tts && formData.tts_audio_file ? formData.tts_audio_file : null,
         is_test: formData.is_test,
-        test_phone: formData.is_test ? formData.test_phone : null
+        test_phone: formData.is_test ? formData.test_phone : null,
+        status: formData.schedule ? 'scheduled' : undefined
       };
 
       await campaignsAPI.update(editingCampaign.id, campaignData);
