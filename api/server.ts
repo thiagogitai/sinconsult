@@ -411,6 +411,7 @@ function createTables() {
       db.run(`ALTER TABLE campaigns ADD COLUMN tts_config_id TEXT`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN tts_audio_file TEXT`, () => {});
       db.run(`ALTER TABLE campaigns ADD COLUMN email_template_id INTEGER`, () => {});
+      db.run(`ALTER TABLE messages ADD COLUMN evolution_id TEXT`, () => {});
 
       // Tabela de mensagens
       db.run(`CREATE TABLE IF NOT EXISTS messages (
@@ -425,6 +426,7 @@ function createTables() {
         delivered_at DATETIME,
         read_at DATETIME,
         error_message TEXT,
+        evolution_id TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`, (err) => {
         if (err) reject(err);
@@ -1321,6 +1323,60 @@ app.post('/api/campaigns/:id/stop', authenticateToken, asyncHandler(async (req, 
   } catch (error) {
     logger.error('Erro ao parar campanha:', { error });
     throw error;
+  }
+}));
+
+// Estatísticas da campanha (requer autenticação)
+app.get('/api/campaigns/:id/stats', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const totals = await dbGet(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent,
+        SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered,
+        SUM(CASE WHEN status = 'read' THEN 1 ELSE 0 END) as read,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+      FROM messages
+      WHERE campaign_id = ?
+    `, [id]);
+
+    const deliveredList = await dbAll(`
+      SELECT m.id as message_id, c.name, c.phone, m.sent_at, m.delivered_at, m.read_at
+      FROM messages m
+      JOIN contacts c ON c.id = m.contact_id
+      WHERE m.campaign_id = ? AND m.status IN ('delivered','read')
+      ORDER BY m.delivered_at DESC NULLS LAST, m.read_at DESC NULLS LAST, m.sent_at DESC
+      LIMIT 100
+    `, [id]);
+
+    const failedList = await dbAll(`
+      SELECT m.id as message_id, c.name, c.phone, m.error_message
+      FROM messages m
+      JOIN contacts c ON c.id = m.contact_id
+      WHERE m.campaign_id = ? AND m.status = 'failed'
+      ORDER BY m.created_at DESC
+      LIMIT 100
+    `, [id]);
+
+    const percentage = totals && totals.total > 0 ? Math.round(((totals.sent || 0) / totals.total) * 100) : 0;
+
+    res.json({
+      success: true,
+      total_target: totals?.total || 0,
+      total_sent: totals?.sent || 0,
+      total_delivered: totals?.delivered || 0,
+      total_read: totals?.read || 0,
+      total_failed: totals?.failed || 0,
+      total_pending: totals?.pending || 0,
+      percentage,
+      delivered: deliveredList,
+      failed: failedList
+    });
+  } catch (error: any) {
+    logger.error('Erro ao obter estatísticas da campanha:', { error: error.message });
+    res.status(500).json({ success: false, error: 'Erro ao obter estatísticas da campanha' });
   }
 }));
 
@@ -4725,15 +4781,16 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
           let errorMessage = null;
           
           try {
+            let resp: any = null;
             if (campaign.message_type === 'text') {
-              await evolutionAPI.sendTextMessage(instance.instance_id, {
+              resp = await evolutionAPI.sendTextMessage(instance.instance_id, {
                 number: contact.phone,
                 text: campaign.message_template,
                 delay: messageDelay
               });
               sent = true;
             } else if (campaign.message_type === 'image' && campaign.media_url) {
-              await evolutionAPI.sendImage(instance.instance_id, {
+              resp = await evolutionAPI.sendImage(instance.instance_id, {
                 number: contact.phone,
                 media: campaign.media_url,
                 caption: campaign.message_template,
@@ -4743,7 +4800,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
             } else if (campaign.message_type === 'audio') {
               const audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
               if (audioUrl) {
-                await evolutionAPI.sendAudio(instance.instance_id, {
+                resp = await evolutionAPI.sendAudio(instance.instance_id, {
                   number: contact.phone,
                   audio: audioUrl,
                   delay: messageDelay,
@@ -4757,11 +4814,12 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
               logger.info(`Mensagem enviada para ${contact.phone}`);
               
               // Atualizar status da mensagem
+              const evoId = resp?.key?.id || null;
               await dbRun(`
                 UPDATE messages 
-                SET status = 'sent', sent_at = CURRENT_TIMESTAMP, error_message = NULL
+                SET status = 'sent', sent_at = CURRENT_TIMESTAMP, error_message = NULL, evolution_id = COALESCE(?, evolution_id)
                 WHERE id = ?
-              `, [messageResult.lastID]);
+              `, [evoId, messageResult.lastID]);
             }
             
           } catch (sendError) {
@@ -4825,10 +4883,17 @@ app.post('/api/webhooks/evolution', asyncHandler(async (req, res) => {
         const status = getMessageStatusFromEvent(data);
         
         if (status) {
-          // Atualizar status da mensagem no banco
-          // Note: Precisamos mapear o messageId do Evolution com o nosso ID interno
-          // Isso pode ser feito armazenando o evolution_id quando a mensagem é enviada
-          logger.info(`Status da mensagem ${messageId}: ${status}`);
+          // Atualizar status da mensagem no banco usando evolution_id
+          if (status === 'sent') {
+            await dbRun(`UPDATE messages SET status='sent', sent_at=CURRENT_TIMESTAMP WHERE evolution_id = ?`, [messageId]);
+          } else if (status === 'delivered') {
+            await dbRun(`UPDATE messages SET status='delivered', delivered_at=CURRENT_TIMESTAMP WHERE evolution_id = ?`, [messageId]);
+          } else if (status === 'read') {
+            await dbRun(`UPDATE messages SET status='read', read_at=CURRENT_TIMESTAMP WHERE evolution_id = ?`, [messageId]);
+          } else if (status === 'played') {
+            await dbRun(`UPDATE messages SET status='read', read_at=CURRENT_TIMESTAMP WHERE evolution_id = ?`, [messageId]);
+          }
+          logger.info(`Status da mensagem ${messageId} atualizado para: ${status}`);
         }
       }
     } else if (event === 'connection.update') {

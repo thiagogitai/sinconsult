@@ -49,6 +49,9 @@ const Campaigns: React.FC = () => {
   const [smsTemplates, setSmsTemplates] = useState<any[]>([]);
   const [emailConfigs, setEmailConfigs] = useState<any[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<any[]>([]);
+  const [statsModalOpen, setStatsModalOpen] = useState(false);
+  const [statsModalData, setStatsModalData] = useState<any | null>(null);
+  const [statsCampaignName, setStatsCampaignName] = useState<string>('');
 
   useEffect(() => {
     fetchCampaigns();
@@ -142,7 +145,28 @@ const Campaigns: React.FC = () => {
         type: c.type ?? c.message_type ?? 'text',
         schedule: c.schedule ?? c.scheduled_time ?? c.schedule_time ?? ''
       }));
-      setCampaigns(normalized);
+      // Buscar estatísticas para cada campanha
+      const withStats = await Promise.all(normalized.map(async (c: any) => {
+        try {
+          const statsResp = await fetch(`/api/campaigns/${c.id}/stats`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+          if (statsResp.ok) {
+            const stats = await statsResp.json();
+            return {
+              ...c,
+              total_target: stats.total_target,
+              total_sent: stats.total_sent,
+              total_failed: stats.total_failed,
+              total_delivered: stats.total_delivered,
+              total_read: stats.total_read,
+              percentage: stats.percentage
+            };
+          }
+        } catch {}
+        return c;
+      }));
+      setCampaigns(withStats);
     } catch (error) {
       console.error('Erro ao carregar campanhas:', error);
     } finally {
@@ -631,6 +655,29 @@ const Campaigns: React.FC = () => {
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
+                        onClick={async () => {
+                          try {
+                            const statsResp = await fetch(`/api/campaigns/${campaign.id}/stats`, {
+                              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                            });
+                            if (statsResp.ok) {
+                              const stats = await statsResp.json();
+                              setStatsCampaignName(campaign.name);
+                              setStatsModalData(stats);
+                              setStatsModalOpen(true);
+                            } else {
+                              alert('Erro ao carregar estatísticas');
+                            }
+                          } catch (e) {
+                            alert('Erro ao carregar estatísticas');
+                          }
+                        }}
+                        className="p-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors"
+                        title="Ver Entregas"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
                         onClick={() => handleDeleteCampaign(campaign.id)}
                         className="p-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-colors"
                         title="Excluir Campanha"
@@ -1013,6 +1060,61 @@ const Campaigns: React.FC = () => {
               >
                 {editingCampaign ? 'Atualizar Campanha' : 'Criar Campanha'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Estatísticas */}
+      {statsModalOpen && statsModalData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Entrega da Campanha: {statsCampaignName}</h2>
+              <button onClick={() => setStatsModalOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500">Alvo</div>
+                <div className="text-2xl font-bold text-gray-900">{statsModalData.total_target}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500">Enviadas</div>
+                <div className="text-2xl font-bold text-gray-900">{statsModalData.total_sent}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500">Entregues</div>
+                <div className="text-2xl font-bold text-gray-900">{statsModalData.total_delivered}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-xs text-gray-500">Falhas</div>
+                <div className="text-2xl font-bold text-gray-900">{statsModalData.total_failed}</div>
+              </div>
+            </div>
+            <div className="mb-6">
+              <div className="text-sm font-semibold text-gray-700 mb-2">Quem recebeu</div>
+              <div className="border rounded-lg">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Nome</th>
+                      <th className="px-4 py-2 text-left">Telefone</th>
+                      <th className="px-4 py-2 text-left">Entregue</th>
+                      <th className="px-4 py-2 text-left">Lido</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(statsModalData.delivered || []).map((row: any) => (
+                      <tr key={row.message_id} className="border-t">
+                        <td className="px-4 py-2">{row.name}</td>
+                        <td className="px-4 py-2">{row.phone}</td>
+                        <td className="px-4 py-2">{row.delivered_at || '-'}</td>
+                        <td className="px-4 py-2">{row.read_at || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
