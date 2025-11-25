@@ -1493,18 +1493,44 @@ app.post('/api/campaigns/:id/start', authenticateToken, asyncHandler(async (req,
       WHERE id = ?
     `, [id]);
     
-    const updatedCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
+    const campaign: any = await dbGet('SELECT * FROM campaigns WHERE id = ?', [id]);
     
-    // Criar notificação de campanha iniciada
     const userId = (req as any).user?.userId;
     await createNotification(
       userId,
       'success',
       'Campanha iniciada',
-      `Campanha "${updatedCampaign.name}" foi iniciada com sucesso`
+      `Campanha "${campaign.name}" foi iniciada com sucesso`
     );
-    
-    res.json({ success: true, data: updatedCampaign });
+
+    await loadEvolutionConfigFromDB();
+
+    let contactIds: string[] = [];
+    const contacts = await dbAll(`
+      SELECT id FROM contacts 
+      WHERE ( ? IS NULL OR ? = '' OR segment = ? )
+        AND (is_blocked = 0 OR is_blocked IS NULL)
+        AND is_active = 1
+    `, [campaign.target_segment, campaign.target_segment, campaign.target_segment]);
+    contactIds = contacts.map((c: any) => String(c.id));
+
+    if (campaign.is_test) {
+      if (campaign.test_phone && String(campaign.test_phone).trim() !== '') {
+        const phone = normalizePhone(String(campaign.test_phone));
+        let contact = await dbGet('SELECT id FROM contacts WHERE phone = ?', [phone]);
+        if (!contact) {
+          const insert = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, 1)', ['Teste', phone]);
+          contact = { id: insert.lastID } as any;
+        }
+        contactIds = [String(contact.id)];
+      } else if (contactIds.length > 0) {
+        contactIds = contactIds.slice(0, 1);
+      }
+    }
+
+    await processCampaignWithQueue(campaign, contactIds);
+
+    res.json({ success: true, data: campaign });
   } catch (error) {
     logger.error('Erro ao iniciar campanha:', { error });
     throw error;
@@ -4724,7 +4750,7 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
     
     // Verificar se a instância está conectada
     const instance = await dbGet('SELECT * FROM whatsapp_instances WHERE instance_id = ?', [instance_id]);
-    if (!instance || instance.status !== 'connected') {
+    if (!instance || (instance.status !== 'connected' && instance.status !== 'open')) {
       return res.status(400).json({ error: 'Instância não está conectada' });
     }
     
