@@ -18,7 +18,7 @@
     "server:dev": "nodemon",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\"",
     "postinstall": "npm run build:production",
-    "deploy:simconsult": "sh -c 'set -e; cd ~/simconsult; git fetch origin main; git checkout main; git pull --rebase origin main; npm ci --omit=dev || npm install; npm run build:frontend; pm2 describe simconsult >/dev/null 2>&1 && pm2 restart simconsult || pm2 start dist-server/api/server.js --name simconsult; pm2 save'"
+    "deploy:simconsult": "sh -c 'set -e; cd ~/simconsult; git fetch origin main; git checkout main; git pull --rebase origin main; npm ci --include=dev || npm install --include=dev; pm2 describe simconsult >/dev/null 2>&1 && pm2 restart simconsult || pm2 start dist-server/api/server.js --name simconsult; pm2 save'"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.0",

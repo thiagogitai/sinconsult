@@ -2119,7 +2119,7 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
     // Limpar arquivo temporário
     fs.unlinkSync(req.file.path);
     
-    res.json({ processed, errors, errorLog: errorLog.slice(0, 10), total: Math.max(rowsCount - 1, 0) });
+    res.json({ processed, errors, errorLog: errorLog.slice(0, 10), total: data.length });
     
   } catch (error) {
     logger.error('Erro ao processar Excel:', { error });
@@ -2277,7 +2277,7 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
       }
     }
 
-    res.json({ processed, errors, errorLog: errorLog.slice(0, 10), total: data.length });
+    res.json({ processed, errors, errorLog: errorLog.slice(0, 10), total: Math.max(rowsCount - 1, 0) });
   } catch (error) {
     logger.error('Erro ao importar do public:', { error });
     res.status(500).json({ error: 'Erro ao importar dados do public' });
