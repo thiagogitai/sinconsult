@@ -1912,8 +1912,8 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
         const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
         if (!existing) {
           await dbRun(`
-            INSERT INTO contacts (name, phone, email)
-            VALUES (?, ?, ?)
+            INSERT INTO contacts (name, phone, email, is_active)
+            VALUES (?, ?, ?, 1)
           `, [name, normalizedPhone, email || null]);
         }
         

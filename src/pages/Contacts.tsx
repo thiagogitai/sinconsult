@@ -63,17 +63,21 @@ const Contacts: React.FC = () => {
         // A API retorna array diretamente, não dentro de data.data
         const contactsList = Array.isArray(data) ? data : (data.data || []);
         // Converter tags de string para array se necessário
-        const normalizedContacts = contactsList.map((contact: any) => ({
-          ...contact,
-          tags: contact.tags 
-            ? (Array.isArray(contact.tags) 
-                ? contact.tags 
-                : (contact.tags.split ? contact.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t) : []))
-            : [],
-          status: (!contact.is_blocked && (contact.is_active === 1 || contact.is_active === true || contact.is_active === undefined)) 
-            ? 'active' 
-            : 'cancelled'
-        }));
+        const normalizedContacts = contactsList.map((contact: any) => {
+          const isActiveNum = contact.is_active;
+          const isBlockedNum = contact.is_blocked;
+          const isActive = isActiveNum === 1 || isActiveNum === '1' || isActiveNum === true || isActiveNum === null || isActiveNum === undefined;
+          const isBlocked = isBlockedNum === 1 || isBlockedNum === '1' || isBlockedNum === true;
+          return {
+            ...contact,
+            tags: contact.tags 
+              ? (Array.isArray(contact.tags) 
+                  ? contact.tags 
+                  : (contact.tags.split ? contact.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t) : []))
+              : [],
+            status: !isBlocked && isActive ? 'active' : 'cancelled'
+          };
+        });
         setContacts(normalizedContacts);
       } else {
         console.error('Erro ao carregar contatos:', data.message);
