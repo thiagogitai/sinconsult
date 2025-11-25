@@ -2033,49 +2033,58 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
     let errors = 0;
     const errorLog: string[] = [];
     
-    for (const row of data) {
+    const normalizeKey = (k: string) => String(k || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9_+]/g, '');
+    const pickFlexible = (rowObj: any, keys: string[]): string => {
+      const targets = keys.map(normalizeKey);
+      for (const rk of Object.keys(rowObj || {})) {
+        const nk = normalizeKey(rk);
+        if (targets.includes(nk)) {
+          const v = rowObj[rk];
+          if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+        }
+      }
+      for (const k of keys) {
+        const v = rowObj[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+      }
+      return '';
+    };
+
+    const nameKeys = ['Nome','name','Name','nome','contact_name','Cliente','cliente','Contato','contato','Nome Completo','nomecompleto'];
+    const phoneKeys = ['Telefone','phone','Phone','Celular','celular','WhatsApp','whatsapp','Fone','fone','Telefone com DDD','telefone_com_ddd','ddd+telefone','DDD+Telefone','DDD+TELEFONE','Numero','Número','numero','número','DDD+Numero','DDD+Número','whatsappcomddd','WhatsApp com DDD'];
+
+    data.forEach(async (row: any, idx: number) => {
       try {
-        const pick = (keys: string[]): string => {
-          for (const k of keys) {
-            const v = (row as any)[k];
-            if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
-          }
-          return '';
-        };
-        const nameRaw = pick(['Nome','name','Name','nome','contact_name']);
-        const name = nameRaw
-          .replace(/[0-9]/g, '')
-          .replace(/\s{2,}/g, ' ')
-          .trim();
-        const rawPhone = pick(['Telefone','phone','Phone','Celular','celular','WhatsApp','whatsapp','Fone','fone','Telefone com DDD','telefone_com_ddd','ddd+telefone']);
-        const email = pick(['Email','email','E-mail','e-mail','mail']);
-        if (!name || !rawPhone) {
+        const nameRaw = pickFlexible(row, nameKeys);
+        const nameClean = (nameRaw || '').replace(/[0-9]/g, '').replace(/\s{2,}/g, ' ').trim();
+        const rawPhone = pickFlexible(row, phoneKeys);
+        const email = pickFlexible(row, ['Email','email','E-mail','e-mail','mail']);
+        if (!rawPhone) {
           errors++;
-          errorLog.push(`Registro ${processed + errors}: Nome e telefone são obrigatórios`);
-          continue;
+          errorLog.push(`Registro ${idx + 1}: Telefone não encontrado`);
+          return;
         }
         const normalizedPhone = normalizePhone(rawPhone);
         const phoneValidation = validatePhone(normalizedPhone);
         if (!phoneValidation.isValid) {
           errors++;
-          errorLog.push(`Registro ${processed + errors}: Telefone inválido (${rawPhone})`);
-          continue;
+          errorLog.push(`Registro ${idx + 1}: Telefone inválido (${rawPhone})`);
+          return;
         }
-        
+        const finalName = nameClean && nameClean.length > 0 ? nameClean : `Contato ${normalizedPhone}`;
         const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
         if (!existing) {
           await dbRun(`
             INSERT INTO contacts (name, phone, email, is_active)
             VALUES (?, ?, ?, 1)
-          `, [name, normalizedPhone, email || null]);
+          `, [finalName, normalizedPhone, email || null]);
         }
-        
         processed++;
       } catch (error) {
         errors++;
-        errorLog.push(`Erro: ${error}`);
+        errorLog.push(`Registro ${idx + 1}: Erro inesperado`);
       }
-    }
+    });
     
     // Limpar arquivo temporário
     fs.unlinkSync(req.file.path);
