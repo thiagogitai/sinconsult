@@ -1201,7 +1201,11 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       test_phone || null
     ]);
     
-    const newCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
+    let newCampaign: any = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
+    if (newCampaign && newCampaign.status === 'draft' && newCampaign.scheduled_at) {
+      await dbRun(`UPDATE campaigns SET status = 'scheduled', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [result.lastID]);
+      newCampaign = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
+    }
     
     // Criar notificação de campanha criada
     const userId = (req as any).user?.userId;
