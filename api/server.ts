@@ -2105,7 +2105,7 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
 // Importar contatos lendo um arquivo já existente em /public (requer autenticação)
 app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const { filename, nameCol, phoneCol } = req.body as any;
+    const { filename, nameCol, phoneCol, sheetIndex, sheetName } = req.body as any;
     if (!filename || String(filename).trim() === '') {
       return res.status(400).json({ error: 'Informe o nome do arquivo em public (ex: contatos.xlsx)' });
     }
@@ -2124,8 +2124,32 @@ app.post('/api/import/public', authenticateToken, asyncHandler(async (req, res) 
     }
 
     const workbook = XLSX.readFile(fullPath);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+    let targetSheetName: string | null = null;
+    if (typeof sheetIndex === 'number' && workbook.SheetNames[sheetIndex]) {
+      targetSheetName = workbook.SheetNames[sheetIndex];
+    } else if (sheetName && workbook.SheetNames.includes(sheetName)) {
+      targetSheetName = sheetName;
+    } else {
+      let bestScore = -1;
+      for (const sn of workbook.SheetNames) {
+        const ws = workbook.Sheets[sn];
+        const testRows: any[] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        const cols = Math.max(...testRows.map((r: any[]) => r.length), 0);
+        let score = 0;
+        const sample = Math.min(testRows.length, 50);
+        for (let i = 1; i < sample; i++) {
+          const r: any[] = testRows[i] as any[];
+          for (let c = 0; c < cols; c++) {
+            const v = String(r[c] ?? '').trim();
+            const d = v.replace(/\D/g, '');
+            if (d.length >= 8 && d.length <= 13) score++;
+          }
+        }
+        if (score > bestScore) { bestScore = score; targetSheetName = sn; }
+      }
+      if (!targetSheetName) targetSheetName = workbook.SheetNames[0];
+    }
+    const worksheet = workbook.Sheets[targetSheetName as string];
     const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
     let processed = 0;

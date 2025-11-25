@@ -53,21 +53,21 @@ export function validatePhone(phone: string): PhoneValidationResult {
     }
   }
 
-  // Validação para números internacionais (10-15 dígitos)
-  if (cleaned.length >= 10 && cleaned.length <= 15) {
+  // Validação para números internacionais (8-15 dígitos)
+  if (cleaned.length >= 8 && cleaned.length <= 15) {
     // Formato internacional básico
     const formatted = `+${cleaned}`;
     
     return {
       isValid: true,
       formatted: formatted,
-      countryCode: cleaned.substring(0, 3)
+      countryCode: cleaned.startsWith('55') ? '55' : cleaned.substring(0, 3)
     };
   }
 
   return {
     isValid: false,
-    error: 'Número de telefone deve ter entre 10 e 15 dígitos'
+    error: 'Número de telefone não reconhecido'
   };
 }
 
@@ -77,13 +77,34 @@ export function validatePhone(phone: string): PhoneValidationResult {
  * @returns Número normalizado (apenas dígitos com código do país)
  */
 export function normalizePhone(phone: string): string {
-  const cleaned = phone.replace(/\D/g, '');
+  let cleaned = phone.replace(/\D/g, '');
   
+  // Remover prefixos de discagem internacional/nacional (00, 0 + operadora)
+  if (cleaned.startsWith('00')) {
+    cleaned = cleaned.replace(/^00+/, '');
+  }
+  // Remover padrão 0 + operadora (ex: 021, 031, 041...)
+  if (cleaned.length >= 3 && cleaned.startsWith('0')) {
+    cleaned = cleaned.slice(3);
+  }
+  // Remover zeros à esquerda restantes
+  cleaned = cleaned.replace(/^0+/, '');
+
+  // Se começa com 55 e tem mais de 11 dígitos, manter como internacional
+  if (cleaned.startsWith('55')) {
+    return cleaned;
+  }
+
   // Se não começa com código de país e tem 10-11 dígitos, assume Brasil
-  if (cleaned.length >= 10 && cleaned.length <= 11 && !cleaned.startsWith('55')) {
+  if (cleaned.length >= 10 && cleaned.length <= 11) {
     return `55${cleaned}`;
   }
-  
+
+  // Se tem entre 8 e 9 dígitos, ainda pode ser número sem DDD; tentar manter
+  if (cleaned.length >= 8 && cleaned.length <= 9) {
+    return cleaned;
+  }
+
   return cleaned;
 }
 
