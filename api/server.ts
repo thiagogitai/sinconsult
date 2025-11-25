@@ -1017,26 +1017,41 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
   try {
     const campaigns = await dbAll(`
       SELECT 
-        id,
-        name,
-        message as message_template,
-        message_type,
-        status,
-        scheduled_at as schedule_time,
-        0 as target_count,
-        0 as sent_count,
-        0 as delivered_count,
-        0 as read_count,
-        0 as failed_count,
-        use_tts,
-        tts_config_id,
-        tts_audio_file,
-        created_at
-      FROM campaigns
-      ORDER BY created_at DESC
+        c.id,
+        c.name,
+        c.message as message_template,
+        c.message_type,
+        c.status,
+        c.scheduled_at as schedule_time,
+        c.use_tts,
+        c.tts_config_id,
+        c.tts_audio_file,
+        c.created_at,
+        -- Aggregated delivery metrics
+        (
+          SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id
+        ) AS total_target,
+        (
+          SELECT COALESCE(SUM(CASE WHEN m.status = 'sent' THEN 1 ELSE 0 END), 0)
+          FROM messages m WHERE m.campaign_id = c.id
+        ) AS total_sent,
+        (
+          SELECT COALESCE(SUM(CASE WHEN m.status = 'delivered' THEN 1 ELSE 0 END), 0)
+          FROM messages m WHERE m.campaign_id = c.id
+        ) AS total_delivered,
+        (
+          SELECT COALESCE(SUM(CASE WHEN m.status = 'read' THEN 1 ELSE 0 END), 0)
+          FROM messages m WHERE m.campaign_id = c.id
+        ) AS total_read,
+        (
+          SELECT COALESCE(SUM(CASE WHEN m.status = 'failed' THEN 1 ELSE 0 END), 0)
+          FROM messages m WHERE m.campaign_id = c.id
+        ) AS total_failed
+      FROM campaigns c
+      ORDER BY c.created_at DESC
     `);
-    
-    res.json({ campaigns: campaigns });
+
+    res.json({ campaigns });
   } catch (error) {
     logger.error('Erro ao buscar campanhas:', { error });
     throw error;
