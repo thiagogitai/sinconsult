@@ -5039,7 +5039,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
     // Obter instância ativa
     const instance = await dbGet(`
       SELECT * FROM whatsapp_instances 
-      WHERE status = 'connected' AND is_active = 1 
+      WHERE status IN ('connected','open') AND is_active = 1 
       ORDER BY last_connection DESC 
       LIMIT 1
     `);
