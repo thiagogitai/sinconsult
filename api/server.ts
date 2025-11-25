@@ -4855,7 +4855,7 @@ app.post('/api/messages/bulk-send', authenticateToken, asyncHandler(async (req, 
     
     // Verificar se a instância está conectada
     const instance = await dbGet('SELECT * FROM whatsapp_instances WHERE instance_id = ?', [instance_id]);
-    if (!instance || instance.status !== 'connected') {
+    if (!instance || (instance.status !== 'connected' && instance.status !== 'open')) {
       return res.status(400).json({ error: 'Instância não está conectada' });
     }
     
@@ -4887,24 +4887,24 @@ app.post('/api/messages/bulk-send', authenticateToken, asyncHandler(async (req, 
         let sentMessage;
         try {
           if (message_type === 'image' && media_url) {
-            sentMessage = await evolutionAPI.sendImage(instance_id, {
+            sentMessage = await evolutionAPI.sendImage(instance.name || instance_id, {
               number: contact.phone,
               caption: message,
               media: media_url
             });
           } else if (message_type === 'audio' && media_url) {
-            sentMessage = await evolutionAPI.sendAudio(instance_id, {
+            sentMessage = await evolutionAPI.sendAudio(instance.name || instance_id, {
               number: contact.phone,
               audio: media_url
             });
           } else if (message_type === 'video' && media_url) {
-            sentMessage = await evolutionAPI.sendVideo(instance_id, {
+            sentMessage = await evolutionAPI.sendVideo(instance.name || instance_id, {
               number: contact.phone,
               caption: message,
               media: media_url
             });
           } else {
-            sentMessage = await evolutionAPI.sendTextMessage(instance_id, {
+            sentMessage = await evolutionAPI.sendTextMessage(instance.name || instance_id, {
               number: contact.phone,
               text: message
             });
