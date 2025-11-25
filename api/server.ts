@@ -1799,7 +1799,11 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
           }
           return '';
         };
-        const name = pick(['Nome','name','Name','nome','contact_name']);
+        const nameRaw = pick(['Nome','name','Name','nome','contact_name']);
+        const name = nameRaw
+          .replace(/[0-9]/g, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
         const rawPhone = pick(['Telefone','phone','Phone','Celular','celular','WhatsApp','whatsapp','Fone','fone','Telefone com DDD','telefone_com_ddd','ddd+telefone']);
         const email = pick(['Email','email','E-mail','e-mail','mail']);
         if (!name || !rawPhone) {
