@@ -1040,6 +1040,36 @@ app.get('/api/dashboard/whatsapp-status', authenticateToken, asyncHandler(async 
 
 // ===== ROTAS DE CAMPANHAS =====
 
+// Upload de mídia (requer autenticação)
+app.post('/api/upload/media', authenticateToken, uploadMedia.single('media'), asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Nenhum arquivo enviado' 
+      });
+    }
+
+    // Construir URL do arquivo
+    // O frontend espera a URL relativa ou absoluta. Vamos retornar relativa pois o buildAbsoluteUrl é usado na criação da campanha
+    const fileUrl = `/uploads/${req.file.filename}`;
+    
+    logger.info('Upload realizado com sucesso:', { 
+      filename: req.file.filename, 
+      size: req.file.size,
+      mimetype: req.file.mimetype 
+    });
+
+    res.json({
+      success: true,
+      url: fileUrl
+    });
+  } catch (error) {
+    logger.error('Erro no upload de mídia:', { error });
+    throw error;
+  }
+}));
+
 // Listar campanhas (requer autenticação)
 app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
   try {
