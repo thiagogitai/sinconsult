@@ -4059,7 +4059,7 @@ app.post('/api/whatsapp/instances',
       // Salvar no banco de dados local
       const result = await dbRun(`
       INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, qrcode, is_active)
-      VALUES (?, ?, ?, ?, ?, 1)
+      VALUES (?, ?, ?, ?, ?, true)
     `, [instanceName, instanceId, phoneNumber || null, status, qrcode || null]);
 
       const newInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [result.lastID]);
