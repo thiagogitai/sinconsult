@@ -1018,13 +1018,24 @@ app.post('/api/campaigns/:id/start', authenticateToken, asyncHandler(async (req,
     await loadEvolutionConfigFromDB();
 
     let contactIds: string[] = [];
-    const contacts = await dbAll(`
-      SELECT id FROM contacts 
-      WHERE ( ? IS NULL OR ? = '' OR segment = ? )
-        AND (is_blocked = 0 OR is_blocked IS NULL)
-        AND is_active = 1
-    `, [campaign.target_segment, campaign.target_segment, campaign.target_segment]);
-    contactIds = contacts.map((c: any) => String(c.id));
+
+    // Se não houver segmento definido e não for teste, não enviar para ninguém
+    if (!campaign.target_segment || campaign.target_segment.trim() === '') {
+      if (!campaign.is_test) {
+        logger.warn(`Campanha ${campaign.id} sem segmento definido. Nenhum contato será incluído.`);
+        // Retornar erro ou lista vazia
+        contactIds = [];
+      }
+    } else {
+      // Buscar contatos do segmento específico
+      const contacts = await dbAll(`
+        SELECT id FROM contacts 
+        WHERE segment = ?
+          AND (is_blocked = 0 OR is_blocked IS NULL)
+          AND is_active = 1
+      `, [campaign.target_segment]);
+      contactIds = contacts.map((c: any) => String(c.id));
+    }
 
     if (campaign.is_test) {
       if (campaign.test_phone && String(campaign.test_phone).trim() !== '') {
