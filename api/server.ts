@@ -5108,34 +5108,65 @@ initDatabase()
 
     // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
     // Executa o arquivo PHP webhook-bridge.php
-    app.post('/webhook-bridge.php', asyncHandler(async (req, res) => {
+    const handleWebhookBridge = asyncHandler(async (req, res) => {
       try {
-        const { exec } = await import('child_process');
+        const { spawn } = await import('child_process');
         const phpPath = path.join(process.cwd(), 'public', 'webhook-bridge.php');
 
-        // Converte body para JSON string
-        const bodyJson = JSON.stringify(req.body);
+        // Prepara variáveis de ambiente para simular requisição HTTP no PHP
+        const env = {
+          ...process.env,
+          REQUEST_METHOD: req.method,
+          CONTENT_TYPE: req.headers['content-type'] || 'application/json',
+          HTTP_USER_AGENT: req.headers['user-agent'] || '',
+          REMOTE_ADDR: req.ip || req.connection.remoteAddress || '',
+        };
 
-        // Executa PHP passando o body como stdin
-        exec(`php ${phpPath}`, { encoding: 'utf8' }, (error, stdout, stderr) => {
-          if (error) {
-            logger.error('[webhook-bridge.php] Erro ao executar PHP:', { error: error.message });
+        // Executa PHP
+        const php = spawn('php', [phpPath], { env });
+
+        let output = '';
+        let errorOutput = '';
+
+        // Se for POST, envia o body para o PHP via stdin
+        if (req.method === 'POST' && req.body) {
+          const bodyData = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+          php.stdin.write(bodyData);
+          php.stdin.end();
+        } else {
+          php.stdin.end();
+        }
+
+        php.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+
+        php.stderr.on('data', (data) => {
+          errorOutput += data.toString();
+        });
+
+        php.on('close', (code) => {
+          if (code !== 0) {
+            logger.error('[webhook-bridge.php] PHP error:', { code, stderr: errorOutput });
             return res.status(500).json({ success: false, error: 'Erro ao processar webhook' });
           }
 
-          if (stderr) {
-            logger.warn('[webhook-bridge.php] PHP stderr:', { stderr });
+          if (errorOutput) {
+            logger.warn('[webhook-bridge.php] PHP warnings:', { stderr: errorOutput });
           }
 
           // Retorna a resposta do PHP
           res.setHeader('Content-Type', 'application/json');
-          res.send(stdout || '{"success":true,"message":"OK"}');
+          res.send(output || '{"success":true,"message":"OK"}');
         });
-      } catch (error) {
-        logger.error('[webhook-bridge.php] Erro:', { error });
+      } catch (error: any) {
+        logger.error('[webhook-bridge.php] Erro:', { error: error.message });
         res.status(500).json({ success: false, error: 'Erro interno' });
       }
-    }));
+    });
+
+    app.get('/webhook-bridge.php', handleWebhookBridge);
+    app.post('/webhook-bridge.php', handleWebhookBridge);
   })
   .catch(error => {
     logger.error('Erro ao inicializar banco de dados:', { error });
