@@ -149,54 +149,67 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
 // Implementação simples: recebe dados, retorna 200 OK, encaminha para GAS
 app.all('/webhook-bridge.php', (req, res) => {
-  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby66oCrq7Fj-wDQx3YyycNWUJ_XnzXQtToR0k5qIq_676UA0iujTxymI4WU9j7F8Ulh/exec';
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby66oCrq7Fj-wDQx3YyycNWUJ_XnzXQtToR0k5qIq_676UA0iujTxymI4WU9jF7F8Ulh/exec';
 
-  // 1. Responde imediatamente 200 OK
-  res.status(200).json({ success: true, message: 'OK' });
+  // 1. Responde imediatamente 200 OK (antes de qualquer processamento)
+  res.status(200).send('OK');
 
-  // 2. Encaminha para Google Apps Script em background (não bloqueia a resposta)
+  // 2. Encaminha para Google Apps Script em background
   setImmediate(async () => {
     try {
+      // Aceita tanto JSON quanto form-urlencoded
       const data = req.body || {};
 
-      logger.info('[webhook-bridge] Recebido e encaminhando:', {
+      logger.info('[webhook-bridge] Recebido:', {
+        method: req.method,
+        contentType: req.headers['content-type'],
+        data: data
+      });
+
+      await axios.post(WEB_APP_URL, data, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+
+      logger.info('[webhook-bridge] ✅ Encaminhado para GAS');
+    } catch (error: any) {
+      logger.error('[webhook-bridge] ❌ Erro:', error.message);
+    }
+  });
+});
+
+// Endpoint alternativo (caso o .php não funcione)
+const handleElementorWebhook = (req: any, res: any) => {
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby66oCrq7Fj-wDQx3YyycNWUJ_XnzXQtToR0k5qIq_676UA0iujTxymI4WU9j7F8Ulh/exec';
+
+  // Responde imediatamente com texto simples "OK" (o que o Elementor espera)
+  res.status(200).send('OK');
+
+  setImmediate(async () => {
+    try {
+      // Aceita JSON ou form-urlencoded
+      const data = req.body || {};
+
+      logger.info('[elementor-webhook] Recebido:', {
+        path: req.path,
         method: req.method,
         contentType: req.headers['content-type'],
         dataKeys: Object.keys(data)
       });
 
       await axios.post(WEB_APP_URL, data, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
-
-      logger.info('[webhook-bridge] ✅ Encaminhado para GAS com sucesso');
-    } catch (error: any) {
-      logger.error('[webhook-bridge] ❌ Erro ao encaminhar:', error.message);
-    }
-  });
-});
-
-// Endpoint alternativo (caso o .php não funcione)
-app.all('/api/elementor-webhook', (req, res) => {
-  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby66oCrq7Fj-wDQx3YyycNWUJ_XnzXQtToR0k5qIq_676UA0iujTxymI4WU9j7F8Ulh/exec';
-
-  res.status(200).json({ success: true, message: 'OK' });
-
-  setImmediate(async () => {
-    try {
-      await axios.post(WEB_APP_URL, req.body || {}, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000
       });
-      logger.info('[elementor-webhook] ✅ Dados encaminhados');
+      logger.info('[elementor-webhook] ✅ Dados encaminhados para GAS');
     } catch (error: any) {
       logger.error('[elementor-webhook] ❌ Erro:', error.message);
     }
   });
-});
+};
+
+app.all('/api/elementor-webhook', handleElementorWebhook);
+app.all('/elementor-webhook.php', handleElementorWebhook);
 
 function getPublicBaseUrl(req?: Request): string {
   const envUrl = (process.env.PUBLIC_BASE_URL || '').trim();
