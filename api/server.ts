@@ -4672,10 +4672,16 @@ class MessageQueue {
 // Função auxiliar para obter conteúdo da mídia (URL ou Base64)
 async function getMediaContent(url: string): Promise<string> {
   try {
-    if (!url) return '';
+    logger.info(`[getMediaContent] Processando URL: ${url}`);
+
+    if (!url) {
+      logger.warn('[getMediaContent] URL vazia');
+      return '';
+    }
 
     // Se for URL remota (http/https) e não for localhost, retorna a URL
     if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
+      logger.info('[getMediaContent] URL remota detectada, retornando original');
       return url;
     }
 
@@ -4700,20 +4706,51 @@ async function getMediaContent(url: string): Promise<string> {
       filePath = path.join(process.cwd(), 'uploads', filename);
     }
 
-    if (fs.existsSync(filePath)) {
-      const fileBuffer = fs.readFileSync(filePath);
-      const base64 = fileBuffer.toString('base64');
-      // Evolution API aceita apenas a string Base64 pura ou com prefixo data URI?
-      // Pela documentação/código, parece aceitar string Base64 direta no campo 'media'
-      return base64;
+    logger.info(`[getMediaContent] Caminho resolvido: ${filePath}`);
+
+    // Verificar se arquivo existe
+    if (!fs.existsSync(filePath)) {
+      logger.error(`[getMediaContent] Arquivo não encontrado: ${filePath}`);
+      // Tentar caminho alternativo (raiz do projeto/uploads)
+      const altPath = path.join(__dirname, '../../uploads', path.basename(filePath));
+      logger.info(`[getMediaContent] Tentando caminho alternativo: ${altPath}`);
+
+      if (fs.existsSync(altPath)) {
+        filePath = altPath;
+      } else {
+        logger.error(`[getMediaContent] Arquivo também não encontrado no alternativo`);
+        return url; // Retorna URL original se falhar
+      }
     }
 
-    logger.warn(`Arquivo local não encontrado para conversão Base64: ${filePath} (URL original: ${url})`);
-    return url; // Retorna URL original como fallback
-  } catch (error) {
-    logger.error('Erro ao converter mídia para Base64:', { error, url });
-    return url;
+    // Ler arquivo
+    const fileBuffer = await fs.promises.readFile(filePath);
+    const base64 = fileBuffer.toString('base64');
+    const mimeType = getMimeType(filePath);
+
+    logger.info(`[getMediaContent] Arquivo lido com sucesso. Tamanho: ${fileBuffer.length} bytes. Mime: ${mimeType}`);
+
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error: any) {
+    logger.error('[getMediaContent] Erro ao processar mídia:', { error: error.message });
+    return url; // Retorna URL original em caso de erro
   }
+}
+
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes: { [key: string]: string } = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.mp4': 'video/mp4',
+    '.mp3': 'audio/mpeg',
+    '.ogg': 'audio/ogg',
+    '.webp': 'image/webp',
+    '.pdf': 'application/pdf'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
 }
 
 const messageQueue = new MessageQueue();
