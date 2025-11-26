@@ -24,6 +24,7 @@ import { validatePhone, normalizePhone } from './utils/phoneValidator.js';
 import { SMSServiceFactory } from './services/sms.js';
 import { EmailServiceFactory } from './services/email.js';
 import crypto from 'crypto';
+import axios from 'axios';
 
 // Definir __dirname para ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -5104,6 +5105,35 @@ initDatabase()
         }
       });
     });
+
+    // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
+    app.post('/webhook-bridge', asyncHandler(async (req, res) => {
+      try {
+        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby66oCrq7Fj-wDQx3YyycNWUJ_XnzXQtToR0k5qIq_676UA0iujTxymI4WU9j7F8Ulh/exec';
+
+        // Responde imediatamente 200 OK para o Elementor
+        res.json({ success: true, message: 'OK' });
+
+        // Encaminha para Google Apps Script em background
+        if (WEB_APP_URL) {
+          try {
+            const response = await axios.post(WEB_APP_URL, req.body, {
+              headers: {
+                'User-Agent': 'WebhookBridge/1.0',
+                'Content-Type': 'application/json'
+              },
+              timeout: 3000
+            });
+            logger.info('[webhook-bridge] Encaminhado para GAS', { status: response.status });
+          } catch (error: any) {
+            logger.error('[webhook-bridge] Erro ao encaminhar para GAS:', { error: error.message });
+          }
+        }
+      } catch (error) {
+        logger.error('[webhook-bridge] Erro:', { error });
+        // Mesmo com erro, já respondeu 200 OK acima
+      }
+    }));
   })
   .catch(error => {
     logger.error('Erro ao inicializar banco de dados:', { error });
