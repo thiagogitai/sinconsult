@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Webhook</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <h1>Teste de Webhook</h1>
+    <p>Teste os endpoints do webhook:</p>
+    
+    <form id="webhookForm">
+        <div class="form-group">
+            <label>Endpoint:</label>
+            <select id="endpoint" style="width: 100%; padding: 8px;">
+                <option value="https://certcrm.com.br/api/elementor-webhook">https://certcrm.com.br/api/elementor-webhook</option>
+                <option value="https://certcrm.com.br/webhook-bridge.php">https://certcrm.com.br/webhook-bridge.php</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="nome">Nome:</label>
+            <input type="text" id="nome" name="nome" value="João Silva" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" value="joao@exemplo.com" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="telefone">Telefone:</label>
+            <input type="tel" id="telefone" name="telefone" value="+55 11 98765-4321">
+        </div>
+        
+        <div class="form-group">
+            <label for="mensagem">Mensagem:</label>
+            <textarea id="mensagem" name="mensagem" rows="4">Teste de webhook do formulário</textarea>
+        </div>
+        
+        <button type="submit">Enviar Teste</button>
+    </form>
+    
+    <div id="result" class="result"></div>
+    
+    <script>
+        document.getElementById('webhookForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const endpoint = document.getElementById('endpoint').value;
+            const resultDiv = document.getElementById('result');
+            
+            const formData = {
+                nome: document.getElementById('nome').value,
+                email: document.getElementById('email').value,
+                telefone: document.getElementById('telefone').value,
+                mensagem: document.getElementById('mensagem').value,
+                timestamp: new Date().toISOString()
+            };
+            
+            resultDiv.style.display = 'none';
+            resultDiv.className = 'result';
+            
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <strong>✅ Sucesso!</strong><br>
+                        Status: ${response.status}<br>
+                        Resposta: ${JSON.stringify(data, null, 2)}<br>
+                        <br>
+                        <em>Os dados foram enviados para o Google Apps Script!</em>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `
+                        <strong>⚠️ Resposta recebida mas com status ${response.status}</strong><br>
+                        Resposta: ${JSON.stringify(data, null, 2)}
+                    `;
+                }
+                
+                resultDiv.style.display = 'block';
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <strong>❌ Erro ao enviar:</strong><br>
+                    ${error.message}
+                `;
+                resultDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
