@@ -4296,22 +4296,28 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
     // Enviar mensagem via Evolution API
     let sentMessage;
     try {
-      if (message_type === 'image' && media_url) {
+      // Preparar mídia (converter para Base64 se for local)
+      let finalMedia = media_url;
+      if (media_url && (message_type === 'image' || message_type === 'video' || message_type === 'audio')) {
+        finalMedia = await getMediaContent(media_url);
+      }
+
+      if (message_type === 'image' && finalMedia) {
         sentMessage = await evolutionAPI.sendImage(instance.name || instance_id, {
           number: phone_number,
           caption: message,
-          media: media_url
+          media: finalMedia
         });
-      } else if (message_type === 'audio' && media_url) {
+      } else if (message_type === 'audio' && finalMedia) {
         sentMessage = await evolutionAPI.sendAudio(instance.name || instance_id, {
           number: phone_number,
-          audio: media_url
+          audio: finalMedia
         });
-      } else if (message_type === 'video' && media_url) {
+      } else if (message_type === 'video' && finalMedia) {
         sentMessage = await evolutionAPI.sendVideo(instance.name || instance_id, {
           number: phone_number,
           caption: message,
-          media: media_url
+          media: finalMedia
         });
       } else {
         sentMessage = await evolutionAPI.sendTextMessage(instance.name || instance_id, {
@@ -4398,22 +4404,28 @@ app.post('/api/messages/bulk-send', authenticateToken, asyncHandler(async (req, 
         // Enviar mensagem
         let sentMessage;
         try {
-          if (message_type === 'image' && media_url) {
+          // Preparar mídia (converter para Base64 se for local)
+          let finalMedia = media_url;
+          if (media_url && (message_type === 'image' || message_type === 'video' || message_type === 'audio')) {
+            finalMedia = await getMediaContent(media_url);
+          }
+
+          if (message_type === 'image' && finalMedia) {
             sentMessage = await evolutionAPI.sendImage(instance.name || instance_id, {
               number: contact.phone,
               caption: message,
-              media: media_url
+              media: finalMedia
             });
-          } else if (message_type === 'audio' && media_url) {
+          } else if (message_type === 'audio' && finalMedia) {
             sentMessage = await evolutionAPI.sendAudio(instance.name || instance_id, {
               number: contact.phone,
-              audio: media_url
+              audio: finalMedia
             });
-          } else if (message_type === 'video' && media_url) {
+          } else if (message_type === 'video' && finalMedia) {
             sentMessage = await evolutionAPI.sendVideo(instance.name || instance_id, {
               number: contact.phone,
               caption: message,
-              media: media_url
+              media: finalMedia
             });
           } else {
             sentMessage = await evolutionAPI.sendTextMessage(instance.name || instance_id, {
@@ -4522,24 +4534,30 @@ class MessageQueue {
     `, [contact_id, campaign_id || null, content, message_type || 'text', media_url || null, 'pending']);
 
     try {
+      // Preparar mídia (converter para Base64 se for local)
+      let finalMedia = media_url;
+      if (media_url && (message_type === 'image' || message_type === 'video' || message_type === 'audio')) {
+        finalMedia = await getMediaContent(media_url);
+      }
+
       // Enviar mensagem via Evolution API
       let sentMessage;
-      if (message_type === 'image' && media_url) {
+      if (message_type === 'image' && finalMedia) {
         sentMessage = await evolutionAPI.sendImage(instance_id, {
           number: contact.phone,
           caption: content,
-          media: media_url
+          media: finalMedia
         });
-      } else if (message_type === 'audio' && media_url) {
+      } else if (message_type === 'audio' && finalMedia) {
         sentMessage = await evolutionAPI.sendAudio(instance_id, {
           number: contact.phone,
-          audio: media_url
+          audio: finalMedia
         });
-      } else if (message_type === 'video' && media_url) {
+      } else if (message_type === 'video' && finalMedia) {
         sentMessage = await evolutionAPI.sendVideo(instance_id, {
           number: contact.phone,
           caption: content,
-          media: media_url
+          media: finalMedia
         });
       } else {
         sentMessage = await evolutionAPI.sendTextMessage(instance_id, {
@@ -4557,7 +4575,7 @@ class MessageQueue {
 
       logger.info(`✅ Mensagem enviada para ${contact.phone}`);
 
-    } catch (sendError) {
+    } catch (sendError: any) {
       // Atualizar status da mensagem com erro
       await dbRun(`
         UPDATE messages 
@@ -4568,6 +4586,53 @@ class MessageQueue {
       logger.error(`Erro ao enviar para ${contact.phone}:`, { error: sendError.message });
       throw sendError;
     }
+  }
+}
+
+// Função auxiliar para obter conteúdo da mídia (URL ou Base64)
+async function getMediaContent(url: string): Promise<string> {
+  try {
+    if (!url) return '';
+
+    // Se for URL remota (http/https) e não for localhost, retorna a URL
+    if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
+      return url;
+    }
+
+    // Se for local, ler arquivo e converter para Base64
+    let filePath = url;
+
+    // Remover prefixo de URL local se existir
+    if (url.startsWith('http')) {
+      const urlObj = new URL(url);
+      filePath = urlObj.pathname;
+    }
+
+    // Ajustar caminho para sistema de arquivos
+    // Se começar com /api/uploads ou /uploads, remover e pegar apenas o nome do arquivo
+    if (filePath.includes('/uploads/')) {
+      const parts = filePath.split('/uploads/');
+      const filename = parts[1];
+      filePath = path.join(process.cwd(), 'uploads', filename);
+    } else if (filePath.startsWith('/')) {
+      // Tentar encontrar em uploads se for caminho absoluto
+      const filename = path.basename(filePath);
+      filePath = path.join(process.cwd(), 'uploads', filename);
+    }
+
+    if (fs.existsSync(filePath)) {
+      const fileBuffer = fs.readFileSync(filePath);
+      const base64 = fileBuffer.toString('base64');
+      // Evolution API aceita apenas a string Base64 pura ou com prefixo data URI?
+      // Pela documentação/código, parece aceitar string Base64 direta no campo 'media'
+      return base64;
+    }
+
+    logger.warn(`Arquivo local não encontrado para conversão Base64: ${filePath} (URL original: ${url})`);
+    return url; // Retorna URL original como fallback
+  } catch (error) {
+    logger.error('Erro ao converter mídia para Base64:', { error, url });
+    return url;
   }
 }
 
