@@ -17,6 +17,26 @@ const Import: React.FC = () => {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [tag, setTag] = useState('');
+  const [segments, setSegments] = useState<any[]>([]);
+  const [loadingSegments, setLoadingSegments] = useState(false);
+
+  React.useEffect(() => {
+    fetchSegments();
+  }, []);
+
+  const fetchSegments = async () => {
+    try {
+      setLoadingSegments(true);
+      // Importar dinamicamente para evitar erro de ciclo se necessário, ou usar a importada
+      const { segmentsAPI } = await import('../services/api');
+      const response = await segmentsAPI.getAll();
+      setSegments(response.data || []);
+    } catch (error) {
+      console.error('Erro ao carregar segmentos:', error);
+    } finally {
+      setLoadingSegments(false);
+    }
+  };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -47,17 +67,17 @@ const Import: React.FC = () => {
       }, 200);
 
       // Fazer upload do arquivo
-      const response = await contactsAPI.importExcel(file, tag ? tag.trim().toLowerCase() : undefined);
-      
+      const response = await contactsAPI.importExcel(file, tag ? tag.trim() : undefined);
+
       clearInterval(progressInterval);
       setUploadProgress(100);
 
       setImportResult(response.data);
-      
+
       if (response.data.processed > 0) {
         toast.success(`Importação concluída! ${response.data.processed} contatos importados com sucesso.`);
       }
-      
+
       if (response.data.errors > 0) {
         toast.warning(`${response.data.errors} erros encontrados durante a importação.`);
       }
@@ -69,7 +89,7 @@ const Import: React.FC = () => {
       setIsUploading(false);
       setTimeout(() => setUploadProgress(0), 1000);
     }
-  }, []);
+  }, [tag]); // Adicionado tag como dependência
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -87,11 +107,11 @@ const Import: React.FC = () => {
       { Nome: 'Maria Santos', Telefone: '+55 11 99876-5432', Email: 'maria.santos@email.com', Tags: 'prospect' },
       { Nome: 'Pedro Oliveira', Telefone: '+55 21 91234-5678', Email: 'pedro.oliveira@email.com', Tags: 'cliente' }
     ];
-    
+
     const worksheet = XLSX.utils.json_to_sheet(templateData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Contatos');
-    
+
     XLSX.writeFile(workbook, 'modelo_importacao_contatos.xlsx');
     toast.success('Modelo de planilha baixado com sucesso!');
   };
@@ -137,28 +157,27 @@ const Import: React.FC = () => {
               {isUploading ? 'Importando contatos...' : 'Importar Planilha Excel'}
             </h2>
             <p className="text-gray-600 mb-6">
-              {isUploading 
-                ? 'Processando seu arquivo, por favor aguarde...' 
+              {isUploading
+                ? 'Processando seu arquivo, por favor aguarde...'
                 : 'Arraste e solte seu arquivo Excel aqui ou clique para selecionar'
               }
             </p>
-            
-            <div 
-              {...getRootProps()} 
-              className={`border-2 border-dashed rounded-lg p-8 mb-6 transition-colors ${
-                isDragActive 
-                  ? 'border-green-500 bg-green-50' 
-                  : isUploading 
-                    ? 'border-gray-300 bg-gray-50' 
+
+            <div
+              {...getRootProps()}
+              className={`border-2 border-dashed rounded-lg p-8 mb-6 transition-colors ${isDragActive
+                  ? 'border-green-500 bg-green-50'
+                  : isUploading
+                    ? 'border-gray-300 bg-gray-50'
                     : 'border-gray-300 hover:border-green-400 hover:bg-green-50'
-              } ${isUploading ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                } ${isUploading ? 'cursor-not-allowed' : 'cursor-pointer'}`}
             >
               <input {...getInputProps()} />
               {isUploading ? (
                 <div className="space-y-4">
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-600 h-2 rounded-full transition-all duration-300" 
+                    <div
+                      className="bg-green-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${uploadProgress}%` }}
                     ></div>
                   </div>
@@ -186,15 +205,23 @@ const Import: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left mb-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Tag/Segmento</label>
-                <input
-                  type="text"
-                  value={tag}
-                  onChange={(e) => setTag(e.target.value)}
-                  placeholder="Ex: preco, analises-tendencias"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
-                />
-                <p className="text-xs text-gray-500 mt-1">Opcional. Aplicada aos contatos importados.</p>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Segmento / Tag</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={tag}
+                    onChange={(e) => setTag(e.target.value)}
+                    placeholder="Selecione ou digite..."
+                    list="segments-list"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                  />
+                  <datalist id="segments-list">
+                    {segments.map((segment: any) => (
+                      <option key={segment.id} value={segment.name} />
+                    ))}
+                  </datalist>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Selecione um segmento existente ou crie uma nova tag.</p>
               </div>
             </div>
 
@@ -262,8 +289,8 @@ const Import: React.FC = () => {
             <div>prospect</div>
           </div>
         </div>
-        
-        <button 
+
+        <button
           onClick={downloadTemplate}
           className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
         >
