@@ -1427,7 +1427,7 @@ app.post('/api/contacts', authenticateToken, validate(schemas.createContact), as
 
     const result = await dbRun(`
       INSERT INTO contacts (name, phone, email, segment, is_active, is_blocked)
-      VALUES (?, ?, ?, ?, 1, 0)
+      VALUES (?, ?, ?, ?, true, false)
     `, [name, normalizedPhone, email || null, tags || '']);
 
     const newContact = await dbGet('SELECT * FROM contacts WHERE id = ?', [result.lastID]);
