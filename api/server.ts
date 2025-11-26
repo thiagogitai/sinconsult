@@ -370,7 +370,7 @@ app.post('/api/auth/login', authRateLimiter, validate(schemas.login), asyncHandl
     }
 
     // Buscar usuário ativo
-    const user = await dbGet('SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND is_active = 1', [email]);
+    const user = await dbGet('SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND is_active = true', [email]);
 
     if (!user) {
       return res.status(401).json({
@@ -468,7 +468,7 @@ app.get('/api/auth/verify', authenticateToken, asyncHandler(async (req, res) => 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production') as any;
 
-      const user = await dbGet('SELECT id, name, email, role FROM users WHERE id = ? AND is_active = 1', [decoded.userId]);
+      const user = await dbGet('SELECT id, name, email, role FROM users WHERE id = ? AND is_active = true', [decoded.userId]);
 
       if (!user) {
         return res.status(401).json({
@@ -506,7 +506,7 @@ app.get('/api/auth/verify', authenticateToken, asyncHandler(async (req, res) => 
 // Estatísticas do dashboard (requer autenticação)
 app.get('/api/dashboard/stats', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const totalContacts = await dbGet('SELECT COUNT(*) as count FROM contacts WHERE is_active = 1');
+    const totalContacts = await dbGet('SELECT COUNT(*) as count FROM contacts WHERE is_active = true');
     const messagesToday = await dbGet('SELECT COUNT(*) as count FROM messages WHERE DATE(created_at) = DATE("now")');
     const deliveryStats = await dbGet(`
       SELECT 
@@ -578,7 +578,7 @@ app.get('/api/dashboard/whatsapp-status', authenticateToken, asyncHandler(async 
         last_connection as last_activity,
         created_at
       FROM whatsapp_instances
-      WHERE is_active = 1
+      WHERE is_active = true
       ORDER BY created_at DESC
     `);
 
@@ -1100,8 +1100,8 @@ app.post('/api/campaigns/:id/start', authenticateToken, asyncHandler(async (req,
       const contacts = await dbAll(`
         SELECT id FROM contacts 
         WHERE segment = ?
-          AND (is_blocked = 0 OR is_blocked IS NULL)
-          AND is_active = 1
+          AND (is_blocked = false OR is_blocked IS NULL)
+          AND is_active = true
       `, [campaign.target_segment]);
       contactIds = contacts.map((c: any) => String(c.id));
     }
@@ -1111,7 +1111,7 @@ app.post('/api/campaigns/:id/start', authenticateToken, asyncHandler(async (req,
         const phone = normalizePhone(String(campaign.test_phone));
         let contact = await dbGet('SELECT id FROM contacts WHERE phone = ?', [phone]);
         if (!contact) {
-          const insert = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, 1)', ['Teste', phone]);
+          const insert = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, true)', ['Teste', phone]);
           contact = { id: insert.lastID } as any;
         }
         contactIds = [String(contact.id)];
@@ -1292,7 +1292,7 @@ app.get('/api/contacts', authenticateToken, asyncHandler(async (req, res) => {
         is_active,
         is_blocked,
         CASE 
-          WHEN is_active = 1 OR is_active IS NULL THEN 'active'
+          WHEN is_active = true OR is_active IS NULL THEN 'active'
           ELSE 'canceled'
         END as status,
         created_at,
@@ -1321,9 +1321,9 @@ app.get('/api/contacts', authenticateToken, asyncHandler(async (req, res) => {
 
     // Filtrar bloqueados (por padrão não mostra bloqueados)
     if (blocked === 'true') {
-      query += ` AND is_blocked = 1`;
+      query += ` AND is_blocked = true`;
     } else if (blocked !== 'all') {
-      query += ` AND (is_blocked = 0 OR is_blocked IS NULL)`;
+      query += ` AND (is_blocked = false OR is_blocked IS NULL)`;
     }
 
     query += ` ORDER BY created_at DESC LIMIT 100`;
@@ -1371,7 +1371,7 @@ app.get('/api/contacts/export', authenticateToken, asyncHandler(async (req, res)
         is_blocked,
         created_at
       FROM contacts
-      WHERE (is_blocked = 0 OR is_blocked IS NULL)
+      WHERE (is_blocked = false OR is_blocked IS NULL)
       ORDER BY created_at DESC
     `);
 
@@ -1522,7 +1522,7 @@ app.get('/api/segments/:id/contacts', authenticateToken, asyncHandler(async (req
         is_blocked,
         created_at
       FROM contacts
-      WHERE segment = ? AND (is_blocked = 0 OR is_blocked IS NULL)
+      WHERE segment = ? AND (is_blocked = false OR is_blocked IS NULL)
       ORDER BY created_at DESC
     `, [id]);
 
@@ -1945,7 +1945,7 @@ app.get('/api/templates', authenticateToken, asyncHandler(async (req, res) => {
         created_at,
         updated_at
       FROM message_templates
-      WHERE is_active = 1
+      WHERE is_active = true
     `;
 
     const params: any[] = [];
@@ -2059,7 +2059,7 @@ app.delete('/api/templates/:id', authenticateToken, asyncHandler(async (req, res
 
     await dbRun(`
       UPDATE message_templates 
-      SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+      SET is_active = false, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [id]);
 
@@ -2076,7 +2076,7 @@ app.post('/api/templates/:id/apply', authenticateToken, asyncHandler(async (req,
     const { id } = req.params;
     const { variables = {} } = req.body;
 
-    const template = await dbGet('SELECT * FROM message_templates WHERE id = ? AND is_active = 1', [id]);
+    const template = await dbGet('SELECT * FROM message_templates WHERE id = ? AND is_active = true', [id]);
     if (!template) {
       return res.status(404).json({
         success: false,
@@ -2128,7 +2128,7 @@ app.get('/api/sms/configs', authenticateToken, asyncHandler(async (req, res) => 
         created_at,
         updated_at
       FROM sms_configs
-      WHERE is_active = 1
+      WHERE is_active = true
       ORDER BY created_at DESC
     `);
 
@@ -2199,7 +2199,7 @@ app.post('/api/sms/send', authenticateToken, validate(schemas.sendSMS), asyncHan
     // Buscar configuração SMS ativa
     const smsConfig = await dbGet(`
       SELECT * FROM sms_configs 
-      WHERE id = ? AND is_active = 1
+      WHERE id = ? AND is_active = true
     `, [sms_config_id || 1]);
 
     if (!smsConfig) {
@@ -2407,7 +2407,7 @@ app.post('/api/sms/templates', authenticateToken, asyncHandler(async (req, res) 
       content.trim(),
       JSON.stringify(variables || []),
       category || 'marketing',
-      is_active !== false ? 1 : 0
+      is_active !== false ? true : false
     ]);
 
     const newTemplate = await dbGet(`
@@ -2450,7 +2450,7 @@ app.put('/api/sms/templates/:id', authenticateToken, asyncHandler(async (req, re
       content.trim(),
       JSON.stringify(variables || []),
       category || 'marketing',
-      is_active !== false ? 1 : 0,
+      is_active !== false ? true : false,
       id
     ]);
 
@@ -2518,7 +2518,7 @@ app.get('/api/email/configs', authenticateToken, asyncHandler(async (req, res) =
         created_at,
         updated_at
       FROM email_configs
-      WHERE is_active = 1
+      WHERE is_active = true
       ORDER BY created_at DESC
     `);
 
@@ -2587,7 +2587,7 @@ app.post('/api/email/send', authenticateToken, validate(schemas.sendEmail), asyn
     // Buscar configuração Email ativa
     const emailConfig = await dbGet(`
       SELECT * FROM email_configs 
-      WHERE id = ? AND is_active = 1
+      WHERE id = ? AND is_active = true
     `, [email_config_id || 1]);
 
     if (!emailConfig) {
@@ -2712,7 +2712,7 @@ app.get('/api/email/templates', authenticateToken, asyncHandler(async (req, res)
         created_at,
         updated_at
       FROM email_templates
-      WHERE is_active = 1
+      WHERE is_active = true
     `;
 
     const params: any[] = [];
@@ -2769,7 +2769,7 @@ app.post('/api/email/templates/:id/apply', authenticateToken, asyncHandler(async
     const { id } = req.params;
     const { variables = {} } = req.body;
 
-    const template = await dbGet('SELECT * FROM email_templates WHERE id = ? AND is_active = 1', [id]);
+    const template = await dbGet('SELECT * FROM email_templates WHERE id = ? AND is_active = true', [id]);
     if (!template) {
       return res.status(404).json({
         success: false,
@@ -2912,7 +2912,7 @@ app.post('/api/unsubscribe', validate(schemas.unsubscribe), asyncHandler(async (
     if (contact && channel === 'all') {
       await dbRun(`
         UPDATE contacts 
-        SET is_blocked = 1
+        SET is_blocked = true
         WHERE id = ?
       `, [contact.id]);
     }
@@ -3084,7 +3084,7 @@ app.get('/api/tts/configs', authenticateToken, asyncHandler(async (req, res) => 
   try {
     const configs = await dbAll(`
       SELECT * FROM tts_configs 
-      WHERE is_active = 1 
+      WHERE is_active = true 
       ORDER BY created_at DESC
     `);
 
@@ -3795,7 +3795,7 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
         last_connection as last_activity,
         created_at
       FROM whatsapp_instances
-      WHERE (is_active = 1 OR is_active IS NULL)
+      WHERE (is_active = true OR is_active IS NULL)
       ORDER BY created_at DESC
     `);
 
@@ -4683,7 +4683,7 @@ async function getMediaContent(url: string): Promise<string> {
     // Se for URL remota (http/https) e não for localhost/127.0.0.1, retorna a URL
     // Mas verificar se contém /uploads/ ou /api/uploads/ - se sim, é local mesmo sendo URL completa
     const isLocalUpload = url.includes('/uploads/') || url.includes('/api/uploads/');
-    
+
     if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1') && !isLocalUpload) {
       logger.info('[getMediaContent] URL remota detectada, retornando original');
       return url;
@@ -4779,7 +4779,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
     // Obter instância ativa
     const instance = await dbGet(`
       SELECT * FROM whatsapp_instances 
-      WHERE status IN ('connected','open') AND (is_active = 1 OR is_active IS NULL)
+      WHERE status IN ('connected','open') AND (is_active = true OR is_active IS NULL)
       ORDER BY last_connection DESC 
       LIMIT 1
     `);
@@ -4815,7 +4815,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
       for (const contactId of batch) {
         try {
           // Obter detalhes do contato
-          const contact = await dbGet('SELECT * FROM contacts WHERE id = ? AND (is_blocked = 0 OR is_blocked IS NULL) AND is_active = 1', [contactId]);
+          const contact = await dbGet('SELECT * FROM contacts WHERE id = ? AND (is_blocked = false OR is_blocked IS NULL) AND is_active = true', [contactId]);
           if (!contact) {
             logger.warn(`Contato ${contactId} não encontrado ou está bloqueado`);
             continue;
@@ -5103,7 +5103,7 @@ app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, r
           const phone = normalizePhone(String(campaign.test_phone));
           let contact = await dbGet('SELECT id FROM contacts WHERE phone = ?', [phone]);
           if (!contact) {
-            const insert = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, 1)', ['Teste', phone]);
+            const insert = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, true)', ['Teste', phone]);
             contact = { id: insert.lastID } as any;
           }
           contactIds = [String(contact.id)];
@@ -5165,7 +5165,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
     // Buscar instância conectada
     const instance = await dbGet(`
       SELECT * FROM whatsapp_instances 
-      WHERE status IN ('connected','open') AND (is_active = 1 OR is_active IS NULL)
+      WHERE status IN ('connected','open') AND (is_active = true OR is_active IS NULL)
       ORDER BY last_connection DESC 
       LIMIT 1
     `);
