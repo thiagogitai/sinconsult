@@ -179,6 +179,25 @@ app.all('/webhook-bridge.php', (req, res) => {
   });
 });
 
+// Endpoint alternativo (caso o .php não funcione)
+app.all('/api/elementor-webhook', (req, res) => {
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby66oCrq7Fj-wDQx3YyycNWUJ_XnzXQtToR0k5qIq_676UA0iujTxymI4WU9j7F8Ulh/exec';
+
+  res.status(200).json({ success: true, message: 'OK' });
+
+  setImmediate(async () => {
+    try {
+      await axios.post(WEB_APP_URL, req.body || {}, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+      logger.info('[elementor-webhook] ✅ Dados encaminhados');
+    } catch (error: any) {
+      logger.error('[elementor-webhook] ❌ Erro:', error.message);
+    }
+  });
+});
+
 function getPublicBaseUrl(req?: Request): string {
   const envUrl = (process.env.PUBLIC_BASE_URL || '').trim();
   if (envUrl) return envUrl.replace(/\/+$/, '');
