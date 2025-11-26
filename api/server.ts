@@ -5107,31 +5107,33 @@ initDatabase()
     });
 
     // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
-    app.post('/webhook-bridge', asyncHandler(async (req, res) => {
+    // Executa o arquivo PHP webhook-bridge.php
+    app.post('/webhook-bridge.php', asyncHandler(async (req, res) => {
       try {
-        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby66oCrq7Fj-wDQx3YyycNWUJ_XnzXQtToR0k5qIq_676UA0iujTxymI4WU9j7F8Ulh/exec';
+        const { exec } = await import('child_process');
+        const phpPath = path.join(process.cwd(), 'public', 'webhook-bridge.php');
 
-        // Responde imediatamente 200 OK para o Elementor
-        res.json({ success: true, message: 'OK' });
+        // Converte body para JSON string
+        const bodyJson = JSON.stringify(req.body);
 
-        // Encaminha para Google Apps Script em background
-        if (WEB_APP_URL) {
-          try {
-            const response = await axios.post(WEB_APP_URL, req.body, {
-              headers: {
-                'User-Agent': 'WebhookBridge/1.0',
-                'Content-Type': 'application/json'
-              },
-              timeout: 3000
-            });
-            logger.info('[webhook-bridge] Encaminhado para GAS', { status: response.status });
-          } catch (error: any) {
-            logger.error('[webhook-bridge] Erro ao encaminhar para GAS:', { error: error.message });
+        // Executa PHP passando o body como stdin
+        exec(`php ${phpPath}`, { encoding: 'utf8' }, (error, stdout, stderr) => {
+          if (error) {
+            logger.error('[webhook-bridge.php] Erro ao executar PHP:', { error: error.message });
+            return res.status(500).json({ success: false, error: 'Erro ao processar webhook' });
           }
-        }
+
+          if (stderr) {
+            logger.warn('[webhook-bridge.php] PHP stderr:', { stderr });
+          }
+
+          // Retorna a resposta do PHP
+          res.setHeader('Content-Type', 'application/json');
+          res.send(stdout || '{"success":true,"message":"OK"}');
+        });
       } catch (error) {
-        logger.error('[webhook-bridge] Erro:', { error });
-        // Mesmo com erro, já respondeu 200 OK acima
+        logger.error('[webhook-bridge.php] Erro:', { error });
+        res.status(500).json({ success: false, error: 'Erro interno' });
       }
     }));
   })
