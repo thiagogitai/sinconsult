@@ -2570,7 +2570,7 @@ app.post('/api/email/send', authenticateToken, validate(schemas.sendEmail), asyn
       SELECT * FROM email_messages 
       WHERE email_address = ? 
         AND is_in_quarantine = 1 
-        AND (quarantine_until IS NULL OR quarantine_until > datetime('now'))
+        AND (quarantine_until IS NULL OR quarantine_until > NOW())
       ORDER BY created_at DESC
       LIMIT 1
     `, [email_address]);
@@ -2674,7 +2674,7 @@ app.post('/api/email/send', authenticateToken, validate(schemas.sendEmail), asyn
           UPDATE email_messages 
           SET is_in_quarantine = 1,
               quarantine_reason = ?,
-              quarantine_until = datetime('now', '+7 days'),
+              quarantine_until = NOW() + INTERVAL '7 days',
               bounce_type = 'hard'
           WHERE id = ?
         `, [emailResult.error, messageResult.lastID]);
@@ -2977,7 +2977,7 @@ app.get('/api/email/quarantine', authenticateToken, asyncHandler(async (req, res
         MAX(created_at) as last_attempt
       FROM email_messages
       WHERE is_in_quarantine = 1
-        AND (quarantine_until IS NULL OR quarantine_until > datetime('now'))
+        AND (quarantine_until IS NULL OR quarantine_until > NOW())
       GROUP BY email_address
       ORDER BY last_attempt DESC
     `);
@@ -3054,14 +3054,14 @@ app.put('/api/email/anti-blacklist/:config_id', authenticateToken, asyncHandler(
             dkim_record = ?,
             dmarc_record = ?,
             domain_verification = ?,
-            last_check = datetime('now'),
-            updated_at = datetime('now')
+            last_check = NOW(),
+            updated_at = NOW()
         WHERE email_config_id = ?
       `, [spf_record, dkim_record, dmarc_record, domain_verification, config_id]);
     } else {
       await dbRun(`
         INSERT INTO email_anti_blacklist (email_config_id, spf_record, dkim_record, dmarc_record, domain_verification, last_check)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, ?, NOW())
       `, [config_id, spf_record, dkim_record, dmarc_record, domain_verification]);
     }
 
@@ -3208,7 +3208,7 @@ app.post('/api/tts/generate', authenticateToken, validate(schemas.generateTTS), 
     // Salvar informações no banco de dados
     const result = await dbRun(`
       INSERT INTO tts_files (filename, original_text, provider, voice_id, duration_seconds, size_kb, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, NOW())
     `, [filename, text, provider, voice, duration, sizeKB]);
 
     res.json({
@@ -3651,7 +3651,8 @@ app.post('/api/settings', authenticateToken, asyncHandler(async (req, res) => {
       const value = String(val);
       const cat = (key === 'evolutionApiUrl' || key === 'evolutionApiKey') ? 'api' : category;
       await dbRun(
-        'INSERT OR REPLACE INTO app_settings (key, value, category, updated_at) VALUES (?, ?, ?, datetime(\'now\'))',
+        `INSERT INTO app_settings (key, value, category, updated_at) VALUES (?, ?, ?, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, category = EXCLUDED.category, updated_at = NOW()`,
         [key, value, cat]
       );
     }
@@ -3790,7 +3791,7 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
         phone_connected as phone_number,
         status,
         qrcode,
-        datetime('now') as qrcode_expires_at,
+        NOW() as qrcode_expires_at,
         last_connection as last_activity,
         created_at
       FROM whatsapp_instances
@@ -4679,8 +4680,11 @@ async function getMediaContent(url: string): Promise<string> {
       return '';
     }
 
-    // Se for URL remota (http/https) e não for localhost, retorna a URL
-    if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
+    // Se for URL remota (http/https) e não for localhost/127.0.0.1, retorna a URL
+    // Mas verificar se contém /uploads/ ou /api/uploads/ - se sim, é local mesmo sendo URL completa
+    const isLocalUpload = url.includes('/uploads/') || url.includes('/api/uploads/');
+    
+    if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1') && !isLocalUpload) {
       logger.info('[getMediaContent] URL remota detectada, retornando original');
       return url;
     }
@@ -4688,22 +4692,30 @@ async function getMediaContent(url: string): Promise<string> {
     // Se for local, ler arquivo e converter para Base64
     let filePath = url;
 
-    // Remover prefixo de URL local se existir
+    // Remover prefixo de URL se existir (http://localhost:3006/api/uploads/image.jpg -> /api/uploads/image.jpg)
     if (url.startsWith('http')) {
-      const urlObj = new URL(url);
-      filePath = urlObj.pathname;
+      try {
+        const urlObj = new URL(url);
+        filePath = urlObj.pathname;
+      } catch (e) {
+        // Se não for URL válida, usar como está
+        filePath = url;
+      }
     }
 
     // Ajustar caminho para sistema de arquivos
     // Se começar com /api/uploads ou /uploads, remover e pegar apenas o nome do arquivo
     if (filePath.includes('/uploads/')) {
       const parts = filePath.split('/uploads/');
-      const filename = parts[1];
+      const filename = parts[parts.length - 1]; // Pegar a última parte (pode ter múltiplos /uploads/)
       filePath = path.join(process.cwd(), 'uploads', filename);
     } else if (filePath.startsWith('/')) {
       // Tentar encontrar em uploads se for caminho absoluto
       const filename = path.basename(filePath);
       filePath = path.join(process.cwd(), 'uploads', filename);
+    } else if (!path.isAbsolute(filePath)) {
+      // Se for caminho relativo, assumir que está em uploads/
+      filePath = path.join(process.cwd(), 'uploads', filePath);
     }
 
     logger.info(`[getMediaContent] Caminho resolvido: ${filePath}`);
@@ -4718,8 +4730,14 @@ async function getMediaContent(url: string): Promise<string> {
       if (fs.existsSync(altPath)) {
         filePath = altPath;
       } else {
-        logger.error(`[getMediaContent] Arquivo também não encontrado no alternativo`);
-        return url; // Retorna URL original se falhar
+        // Tentar também em uploads/ relativo ao diretório atual
+        const altPath2 = path.join(process.cwd(), 'uploads', path.basename(filePath));
+        if (fs.existsSync(altPath2)) {
+          filePath = altPath2;
+        } else {
+          logger.error(`[getMediaContent] Arquivo não encontrado em nenhum caminho alternativo`);
+          return url; // Retorna URL original se falhar
+        }
       }
     }
 
@@ -4732,7 +4750,7 @@ async function getMediaContent(url: string): Promise<string> {
 
     return `data:${mimeType};base64,${base64}`;
   } catch (error: any) {
-    logger.error('[getMediaContent] Erro ao processar mídia:', { error: error.message });
+    logger.error('[getMediaContent] Erro ao processar mídia:', { error: error.message, stack: error.stack });
     return url; // Retorna URL original em caso de erro
   }
 }
@@ -4825,19 +4843,21 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
               });
               sent = true;
             } else if (campaign.message_type === 'image' && campaign.media_url) {
-              const mediaUrl = buildAbsoluteUrl(campaign.media_url);
+              // Converter URL local para Base64 se necessário
+              const mediaContent = await getMediaContent(campaign.media_url);
               resp = await evolutionAPI.sendImage(instance.name || instance.instance_id, {
                 number: contact.phone,
-                media: mediaUrl,
+                media: mediaContent,
                 caption: campaign.message_template,
                 delay: messageDelay
               });
               sent = true;
             } else if (campaign.message_type === 'video' && campaign.media_url) {
-              const videoUrl = buildAbsoluteUrl(campaign.media_url);
-              resp = await evolutionAPI.sendVideo(instance.instance_id, {
+              // Converter URL local para Base64 se necessário
+              const videoContent = await getMediaContent(campaign.media_url);
+              resp = await evolutionAPI.sendVideo(instance.name || instance.instance_id, {
                 number: contact.phone,
-                media: videoUrl,
+                media: videoContent,
                 caption: campaign.message_template,
                 delay: messageDelay
               });
@@ -4845,10 +4865,11 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
             } else if (campaign.message_type === 'audio') {
               let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
               if (audioUrl) {
-                audioUrl = buildAbsoluteUrl(audioUrl);
+                // Converter URL local para Base64 se necessário
+                const audioContent = await getMediaContent(audioUrl);
                 resp = await evolutionAPI.sendAudio(instance.name || instance.instance_id, {
                   number: contact.phone,
-                  audio: audioUrl,
+                  audio: audioContent,
                   delay: messageDelay,
                   ptt: true
                 });
@@ -5065,11 +5086,11 @@ app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, r
         c.target_segment,
         c.is_test,
         c.test_phone,
-        GROUP_CONCAT(co.id) as contact_ids
+        STRING_AGG(co.id::text, ',') as contact_ids
       FROM campaigns c
       LEFT JOIN contacts co ON (c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
       WHERE c.status = 'scheduled' 
-        AND c.scheduled_at <= datetime('now')
+        AND c.scheduled_at <= NOW()
       GROUP BY c.id
     `);
 
@@ -5134,6 +5155,107 @@ async function createTables(): Promise<void> {
     throw error;
   }
 }
+
+// ===== ROTA DE TESTE DE ENVIO DE IMAGEM =====
+app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { phone_number, media_url } = req.body;
+    const testPhone = phone_number || '65981173624';
+
+    // Buscar instância conectada
+    const instance = await dbGet(`
+      SELECT * FROM whatsapp_instances 
+      WHERE status IN ('connected','open') AND (is_active = 1 OR is_active IS NULL)
+      ORDER BY last_connection DESC 
+      LIMIT 1
+    `);
+
+    if (!instance) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhuma instância WhatsApp conectada disponível'
+      });
+    }
+
+    // Se não forneceu media_url, tentar encontrar uma imagem no uploads
+    let finalMediaUrl = media_url;
+    if (!finalMediaUrl) {
+      const uploadsDir = path.join(process.cwd(), 'uploads');
+      if (fs.existsSync(uploadsDir)) {
+        const files = fs.readdirSync(uploadsDir);
+        const imageFiles = files.filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
+        if (imageFiles.length > 0) {
+          finalMediaUrl = `/api/uploads/${imageFiles[0]}`;
+          logger.info(`Usando imagem encontrada: ${imageFiles[0]}`);
+        }
+      }
+    }
+
+    if (!finalMediaUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhuma imagem encontrada. Faça upload de uma imagem primeiro ou forneça media_url'
+      });
+    }
+
+    // Normalizar telefone
+    const normalizedPhone = normalizePhone(testPhone);
+
+    // Buscar ou criar contato
+    let contact = await dbGet('SELECT * FROM contacts WHERE phone = ?', [normalizedPhone]);
+    if (!contact) {
+      const result = await dbRun('INSERT INTO contacts (name, phone, is_blocked, is_active) VALUES (?, ?, 0, 1)', ['Teste', normalizedPhone]);
+      contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [result.lastID]);
+    }
+
+    // Preparar mídia (converter para Base64 se necessário)
+    const finalMedia = await getMediaContent(finalMediaUrl);
+
+    logger.info(`Enviando imagem de teste para ${testPhone}`, {
+      instance: instance.name || instance.instance_id,
+      mediaUrl: finalMediaUrl,
+      mediaType: finalMedia.startsWith('data:') ? 'base64' : 'url'
+    });
+
+    // Enviar imagem via Evolution API
+    const sentMessage = await evolutionAPI.sendImage(instance.name || instance.instance_id, {
+      number: testPhone,
+      caption: 'Teste de envio de imagem 🖼️',
+      media: finalMedia
+    });
+
+    // Criar registro de mensagem
+    await dbRun(`
+      INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at, evolution_id)
+      VALUES (?, ?, ?, ?, ?, NOW(), ?)
+    `, [
+      contact.id,
+      'Teste de envio de imagem 🖼️',
+      'image',
+      finalMediaUrl,
+      'sent',
+      sentMessage?.key?.id || null
+    ]);
+
+    res.json({
+      success: true,
+      message: 'Imagem enviada com sucesso!',
+      data: {
+        phone: testPhone,
+        instance: instance.name || instance.instance_id,
+        media_url: finalMediaUrl,
+        evolution_response: sentMessage
+      }
+    });
+  } catch (error: any) {
+    logger.error('Erro ao enviar imagem de teste:', { error: error.message, stack: error.stack });
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao enviar imagem',
+      message: error.message
+    });
+  }
+}));
 
 // ===== INICIALIZAR SERVIDOR =====
 
