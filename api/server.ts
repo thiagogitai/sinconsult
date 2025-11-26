@@ -147,43 +147,37 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
-// Implementação direta em Node.js para garantir performance e evitar erros de PHP
-const handleWebhookBridge = asyncHandler(async (req, res) => {
+// Implementação simples: recebe dados, retorna 200 OK, encaminha para GAS
+app.all('/webhook-bridge.php', (req, res) => {
   const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby66oCrq7Fj-wDQx3YyycNWUJ_XnzXQtToR0k5qIq_676UA0iujTxymI4WU9j7F8Ulh/exec';
 
-  // 1. Responde imediatamente 200 OK para o Elementor não ficar esperando
-  if (!res.headersSent) {
-    res.json({ success: true, message: 'OK' });
-  }
+  // 1. Responde imediatamente 200 OK
+  res.status(200).json({ success: true, message: 'OK' });
 
-  // 2. Encaminha para Google Apps Script em background
-  if (WEB_APP_URL) {
+  // 2. Encaminha para Google Apps Script em background (não bloqueia a resposta)
+  setImmediate(async () => {
     try {
-      // Agora que estamos depois do body-parser, req.body deve estar populado
-      let data = req.body;
+      const data = req.body || {};
 
-      // Log para debug
-      logger.info('[webhook-bridge] Recebido:', {
-        headers: req.headers['content-type'],
-        bodyKeys: Object.keys(data || {})
+      logger.info('[webhook-bridge] Recebido e encaminhando:', {
+        method: req.method,
+        contentType: req.headers['content-type'],
+        dataKeys: Object.keys(data)
       });
 
-      await axios.post(WEB_APP_URL, data || {}, {
+      await axios.post(WEB_APP_URL, data, {
         headers: {
-          'User-Agent': 'WebhookBridge/1.0',
           'Content-Type': 'application/json'
         },
-        timeout: 5000 // Timeout maior para garantir
+        timeout: 10000
       });
-      logger.info('[webhook-bridge] Encaminhado para GAS com sucesso');
-    } catch (error: any) {
-      logger.error('[webhook-bridge] Erro ao encaminhar para GAS:', { error: error.message });
-    }
-  }
-});
 
-app.get('/webhook-bridge.php', handleWebhookBridge);
-app.post('/webhook-bridge.php', handleWebhookBridge);
+      logger.info('[webhook-bridge] ✅ Encaminhado para GAS com sucesso');
+    } catch (error: any) {
+      logger.error('[webhook-bridge] ❌ Erro ao encaminhar:', error.message);
+    }
+  });
+});
 
 function getPublicBaseUrl(req?: Request): string {
   const envUrl = (process.env.PUBLIC_BASE_URL || '').trim();
