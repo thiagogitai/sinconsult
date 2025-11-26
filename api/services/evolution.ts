@@ -62,7 +62,7 @@ class EvolutionAPI {
     const envKey = (process.env.EVOLUTION_API_KEY || 'your-api-key').trim().replace(/`/g, '');
     this.baseURL = envUrl;
     this.apiKey = envKey;
-    
+
     // Validar configuração
     if (!this.apiKey || this.apiKey === 'your-api-key') {
       console.warn('⚠️  EVOLUTION_API_KEY não configurado! Configure no arquivo .env');
@@ -85,12 +85,12 @@ class EvolutionAPI {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
+
     // Evolution API v2 usa 'apikey' no header
     if (this.apiKey && this.apiKey !== 'your-api-key') {
       headers['apikey'] = this.apiKey;
     }
-    
+
     return headers;
   }
 
@@ -121,32 +121,32 @@ class EvolutionAPI {
   private handleError(error: unknown, defaultMessage: string): never {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
-      
+
       if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ETIMEDOUT') {
         throw new Error(`Evolution API não está acessível em ${this.baseURL}. Verifique se o servidor está rodando.`);
       }
-      
+
       if (axiosError.response) {
         const status = axiosError.response.status;
         const data = axiosError.response.data as any;
-        
+
         if (status === 401 || status === 403) {
           throw new Error(`Erro de autenticação na Evolution API. Verifique a API_KEY.`);
         }
-        
+
         if (status === 404) {
           throw new Error(`Endpoint não encontrado na Evolution API. Verifique a URL: ${this.baseURL}`);
         }
-        
+
         const errorMessage = data?.message || data?.error || data?.msg || defaultMessage;
         throw new Error(`Evolution API Error (${status}): ${errorMessage}`);
       }
-      
+
       if (axiosError.request) {
         throw new Error(`Sem resposta da Evolution API. Verifique se está rodando em ${this.baseURL}`);
       }
     }
-    
+
     throw new Error(defaultMessage);
   }
 
@@ -231,7 +231,15 @@ class EvolutionAPI {
   // Enviar imagem
   async sendImage(instanceName: string, message: EvolutionMediaMessage): Promise<EvolutionMessageResponse> {
     try {
-      const response = await axios.post(`${this.baseURL}/message/sendImage/${instanceName}`, message, {
+      const payload = {
+        number: message.number,
+        mediatype: 'image',
+        media: message.media,
+        caption: message.caption,
+        delay: message.delay
+      };
+
+      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
@@ -244,7 +252,14 @@ class EvolutionAPI {
   // Enviar áudio
   async sendAudio(instanceName: string, message: EvolutionAudioMessage): Promise<EvolutionMessageResponse> {
     try {
-      const response = await axios.post(`${this.baseURL}/message/sendAudio/${instanceName}`, message, {
+      const payload = {
+        number: message.number,
+        mediatype: 'audio',
+        media: message.audio,
+        delay: message.delay
+      };
+
+      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
@@ -257,7 +272,15 @@ class EvolutionAPI {
   // Enviar vídeo
   async sendVideo(instanceName: string, message: EvolutionMediaMessage): Promise<EvolutionMessageResponse> {
     try {
-      const response = await axios.post(`${this.baseURL}/message/sendVideo/${instanceName}`, message, {
+      const payload = {
+        number: message.number,
+        mediatype: 'video',
+        media: message.media,
+        caption: message.caption,
+        delay: message.delay
+      };
+
+      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
@@ -305,7 +328,7 @@ class EvolutionAPI {
       }, {
         headers: this.getHeaders(),
       });
-      
+
       return response.data;
     } catch (error: unknown) {
       this.handleError(error, 'Erro ao configurar webhook');
