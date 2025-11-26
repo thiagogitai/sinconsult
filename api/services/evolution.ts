@@ -239,7 +239,8 @@ class EvolutionAPI {
         delay: message.delay
       };
 
-      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
+      // Tentar endpoint específico de imagem primeiro
+      const response = await axios.post(`${this.baseURL}/message/sendImage/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
@@ -255,11 +256,12 @@ class EvolutionAPI {
       const payload = {
         number: message.number,
         mediatype: 'audio',
-        media: message.audio,
+        audio: message.audio, // Endpoint sendAudio espera 'audio' ou 'media'? Geralmente 'audio' no body customizado ou 'media'
         delay: message.delay
       };
 
-      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
+      // Ajuste para endpoint sendAudio que pode esperar 'audio' em vez de 'media'
+      const response = await axios.post(`${this.baseURL}/message/sendAudio/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
@@ -275,12 +277,12 @@ class EvolutionAPI {
       const payload = {
         number: message.number,
         mediatype: 'video',
-        media: message.media,
+        video: message.media, // Endpoint sendVideo geralmente espera 'video' ou 'media'
         caption: message.caption,
         delay: message.delay
       };
 
-      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
+      const response = await axios.post(`${this.baseURL}/message/sendVideo/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
