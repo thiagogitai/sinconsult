@@ -5170,14 +5170,24 @@ initDatabase()
               c.target_segment,
               STRING_AGG(co.id::text, ',') as contact_ids
             FROM campaigns c
-            LEFT JOIN contacts co ON (c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
+            LEFT JOIN contacts co ON (
+              (c.target_segment IS NULL OR c.target_segment = '') -- Se não tem segmento, pega todos (comportamento padrão?)
+              OR 
+              (c.target_segment IS NOT NULL AND c.target_segment != '' AND co.segment = c.target_segment) -- Se tem segmento, filtra
+            )
             WHERE c.status = 'scheduled' 
               AND c.scheduled_at <= NOW()
             GROUP BY c.id
           `);
 
           for (const campaign of campaigns) {
-            logger.info(`Processando campanha: ${campaign.name}`);
+            logger.info(`Processando campanha: ${campaign.name} (ID: ${campaign.id})`);
+            logger.info(`Segmento alvo: "${campaign.target_segment}"`);
+
+            // Se o usuário definiu um segmento mas não encontrou contatos, pode ser que o JOIN falhou ou não há contatos nesse segmento
+            if (campaign.target_segment && (!campaign.contact_ids || campaign.contact_ids.length === 0)) {
+              logger.warn(`Campanha ${campaign.name} tem segmento "${campaign.target_segment}" mas nenhum contato foi encontrado.`);
+            }
 
             // Atualizar status da campanha
             await dbRun(`
