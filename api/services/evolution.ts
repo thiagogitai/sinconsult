@@ -44,6 +44,7 @@ interface EvolutionMediaMessage {
   caption?: string;
   media: string; // Base64 ou URL
   delay?: number;
+  mimetype?: string; // MIME type da mídia (ex: image/jpeg, video/mp4)
 }
 
 interface EvolutionAudioMessage {
@@ -231,16 +232,36 @@ class EvolutionAPI {
   // Enviar imagem
   async sendImage(instanceName: string, message: EvolutionMediaMessage): Promise<EvolutionMessageResponse> {
     try {
+      // Detectar mimetype da imagem automaticamente
+      let mimetype = message.mimetype || 'image/jpeg';
+
+      if (message.media) {
+        if (message.media.startsWith('data:image/png')) {
+          mimetype = 'image/png';
+        } else if (message.media.startsWith('data:image/gif')) {
+          mimetype = 'image/gif';
+        } else if (message.media.startsWith('data:image/webp')) {
+          mimetype = 'image/webp';
+        } else if (message.media.includes('.png')) {
+          mimetype = 'image/png';
+        } else if (message.media.includes('.gif')) {
+          mimetype = 'image/gif';
+        } else if (message.media.includes('.webp')) {
+          mimetype = 'image/webp';
+        }
+      }
+
       const payload = {
         number: message.number,
         mediatype: 'image',
+        mimetype: mimetype,
         media: message.media,
         caption: message.caption,
         delay: message.delay
       };
 
-      // Tentar endpoint específico de imagem primeiro
-      const response = await axios.post(`${this.baseURL}/message/sendImage/${instanceName}`, payload, {
+      // Evolution API v2 usa /message/sendMedia para todos os tipos de mídia
+      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
@@ -274,15 +295,28 @@ class EvolutionAPI {
   // Enviar vídeo
   async sendVideo(instanceName: string, message: EvolutionMediaMessage): Promise<EvolutionMessageResponse> {
     try {
+      // Detectar mimetype do vídeo automaticamente
+      let mimetype = message.mimetype || 'video/mp4';
+
+      if (message.media) {
+        if (message.media.startsWith('data:video/webm')) {
+          mimetype = 'video/webm';
+        } else if (message.media.includes('.webm')) {
+          mimetype = 'video/webm';
+        }
+      }
+
       const payload = {
         number: message.number,
         mediatype: 'video',
-        video: message.media, // Endpoint sendVideo geralmente espera 'video' ou 'media'
+        mimetype: mimetype,
+        media: message.media,
         caption: message.caption,
         delay: message.delay
       };
 
-      const response = await axios.post(`${this.baseURL}/message/sendVideo/${instanceName}`, payload, {
+      // Evolution API v2 usa /message/sendMedia para todos os tipos de mídia
+      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
