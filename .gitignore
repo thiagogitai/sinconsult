@@ -41,4 +41,16 @@ build
 dist-server
 
 # Documentation (never commit)
-*.md
+# Temporary media files
+*.mp3
+*.mp4
+*.jpg
+*.png
+!src/**/*.jpg
+!src/**/*.png
+!public/**/*.jpg
+!public/**/*.png
+
+# Uploads
+uploads/*
+!uploads/.gitkeep

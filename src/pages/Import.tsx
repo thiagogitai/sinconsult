@@ -19,6 +19,7 @@ const Import: React.FC = () => {
   const [tag, setTag] = useState('');
   const [segments, setSegments] = useState<any[]>([]);
   const [loadingSegments, setLoadingSegments] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   React.useEffect(() => {
     fetchSegments();
@@ -38,13 +39,13 @@ const Import: React.FC = () => {
     }
   };
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+  const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
 
-    // Validar tamanho do arquivo (máximo 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Arquivo muito grande. Tamanho máximo: 5MB');
+    // Validar tamanho do arquivo (máximo 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Tamanho máximo: 10MB');
       return;
     }
 
@@ -53,6 +54,18 @@ const Import: React.FC = () => {
     const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
     if (!validExtensions.includes(fileExtension)) {
       toast.error('Formato de arquivo inválido. Use apenas .xlsx ou .xls');
+      return;
+    }
+
+    // Apenas armazenar o arquivo, não processar ainda
+    setSelectedFile(file);
+    setImportResult(null);
+    toast.success(`Arquivo "${file.name}" selecionado. Preencha o segmento e clique em "Importar Contatos".`);
+  }, []);
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      toast.error('Selecione um arquivo primeiro');
       return;
     }
 
@@ -67,7 +80,7 @@ const Import: React.FC = () => {
       }, 200);
 
       // Fazer upload do arquivo
-      const response = await contactsAPI.importExcel(file, tag ? tag.trim() : undefined);
+      const response = await contactsAPI.importExcel(selectedFile, tag ? tag.trim() : undefined);
 
       clearInterval(progressInterval);
       setUploadProgress(100);
@@ -82,6 +95,9 @@ const Import: React.FC = () => {
         toast.warning(`${response.data.errors} erros encontrados durante a importação.`);
       }
 
+      // Limpar arquivo selecionado após importação bem-sucedida
+      setSelectedFile(null);
+
     } catch (error: any) {
       console.error('Erro ao importar Excel:', error);
       toast.error(error.response?.data?.message || 'Erro ao importar arquivo');
@@ -89,7 +105,7 @@ const Import: React.FC = () => {
       setIsUploading(false);
       setTimeout(() => setUploadProgress(0), 1000);
     }
-  }, [tag]); // Adicionado tag como dependência
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -166,10 +182,10 @@ const Import: React.FC = () => {
             <div
               {...getRootProps()}
               className={`border-2 border-dashed rounded-lg p-8 mb-6 transition-colors ${isDragActive
-                  ? 'border-green-500 bg-green-50'
-                  : isUploading
-                    ? 'border-gray-300 bg-gray-50'
-                    : 'border-gray-300 hover:border-green-400 hover:bg-green-50'
+                ? 'border-green-500 bg-green-50'
+                : isUploading
+                  ? 'border-gray-300 bg-gray-50'
+                  : 'border-gray-300 hover:border-green-400 hover:bg-green-50'
                 } ${isUploading ? 'cursor-not-allowed' : 'cursor-pointer'}`}
             >
               <input {...getInputProps()} />
@@ -197,7 +213,7 @@ const Import: React.FC = () => {
                     </div>
                   </div>
                   <p className="text-xs text-gray-400 mt-4">
-                    Formatos aceitos: .xlsx, .xls (máximo 5MB)
+                    Formatos aceitos: .xlsx, .xls (máximo 10MB)
                   </p>
                 </>
               )}
@@ -224,6 +240,32 @@ const Import: React.FC = () => {
                 <p className="text-xs text-gray-500 mt-1">Selecione um segmento existente ou crie uma nova tag.</p>
               </div>
             </div>
+
+            {/* Botão de Importação */}
+            {selectedFile && (
+              <div className="mb-6">
+                <button
+                  onClick={handleImport}
+                  disabled={isUploading}
+                  className="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                >
+                  {isUploading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      <span>Importando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-5 w-5" />
+                      <span>Importar Contatos</span>
+                    </>
+                  )}
+                </button>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Arquivo selecionado: <strong>{selectedFile.name}</strong>
+                </p>
+              </div>
+            )}
 
             {/* Instructions */}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-left">

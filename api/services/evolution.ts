@@ -251,11 +251,20 @@ class EvolutionAPI {
         }
       }
 
+      // Remover prefixo data: se existir (Evolution API espera base64 puro)
+      let cleanMedia = message.media;
+      if (cleanMedia && cleanMedia.startsWith('data:')) {
+        const base64Index = cleanMedia.indexOf('base64,');
+        if (base64Index !== -1) {
+          cleanMedia = cleanMedia.substring(base64Index + 7); // Remove "base64,"
+        }
+      }
+
       const payload = {
         number: message.number,
         mediatype: 'image',
         mimetype: mimetype,
-        media: message.media,
+        media: cleanMedia,
         caption: message.caption,
         delay: message.delay
       };
@@ -274,15 +283,25 @@ class EvolutionAPI {
   // Enviar áudio
   async sendAudio(instanceName: string, message: EvolutionAudioMessage): Promise<EvolutionMessageResponse> {
     try {
+      // Remover prefixo data: se existir
+      let cleanAudio = message.audio;
+      if (cleanAudio && cleanAudio.startsWith('data:')) {
+        const base64Index = cleanAudio.indexOf('base64,');
+        if (base64Index !== -1) {
+          cleanAudio = cleanAudio.substring(base64Index + 7);
+        }
+      }
+
       const payload = {
         number: message.number,
         mediatype: 'audio',
-        audio: message.audio, // Endpoint sendAudio espera 'audio' ou 'media'? Geralmente 'audio' no body customizado ou 'media'
+        mimetype: 'audio/mp4',
+        media: cleanAudio,
         delay: message.delay
       };
 
-      // Ajuste para endpoint sendAudio que pode esperar 'audio' em vez de 'media'
-      const response = await axios.post(`${this.baseURL}/message/sendAudio/${instanceName}`, payload, {
+      // Usar sendMedia para áudio também
+      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
@@ -306,11 +325,20 @@ class EvolutionAPI {
         }
       }
 
+      // Remover prefixo data: se existir
+      let cleanMedia = message.media;
+      if (cleanMedia && cleanMedia.startsWith('data:')) {
+        const base64Index = cleanMedia.indexOf('base64,');
+        if (base64Index !== -1) {
+          cleanMedia = cleanMedia.substring(base64Index + 7);
+        }
+      }
+
       const payload = {
         number: message.number,
         mediatype: 'video',
         mimetype: mimetype,
-        media: message.media,
+        media: cleanMedia,
         caption: message.caption,
         delay: message.delay
       };

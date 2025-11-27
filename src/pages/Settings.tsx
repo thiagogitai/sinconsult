@@ -35,8 +35,8 @@ const SettingsPage: React.FC = () => {
   });
 
   const [apiSettings, setApiSettings] = useState({
-    evolutionApiUrl: process.env.EVOLUTION_API_URL || '',
-    evolutionApiKey: process.env.EVOLUTION_API_KEY || '',
+    evolutionApiUrl: '',
+    evolutionApiKey: '',
     timeout: 30
   });
 
@@ -136,9 +136,9 @@ const SettingsPage: React.FC = () => {
       setSaving(true);
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
-      
+
       let settingsToSave: any = {};
-      
+
       if (activeTab === 'general') {
         settingsToSave = generalSettings;
       } else if (activeTab === 'security') {
@@ -262,11 +262,10 @@ const SettingsPage: React.FC = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                    activeTab === tab.id
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${activeTab === tab.id
                       ? 'border-green-500 text-green-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   <Icon className="h-4 w-4" />
                   <span>{tab.name}</span>
@@ -282,7 +281,7 @@ const SettingsPage: React.FC = () => {
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Configurações Gerais</h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Nome do Sistema</label>
@@ -293,7 +292,7 @@ const SettingsPage: React.FC = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Fuso Horário</label>
                     <select
@@ -306,7 +305,7 @@ const SettingsPage: React.FC = () => {
                       <option value="America/Fortaleza">America/Fortaleza (UTC-3)</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Idioma</label>
                     <select
@@ -319,7 +318,7 @@ const SettingsPage: React.FC = () => {
                       <option value="es-ES">Español</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Moeda</label>
                     <select
@@ -345,16 +344,14 @@ const SettingsPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setGeneralSettings({ ...generalSettings, batchSending: !generalSettings.batchSending })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        generalSettings.batchSending ? 'bg-green-600' : 'bg-gray-300'
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${generalSettings.batchSending ? 'bg-green-600' : 'bg-gray-300'
+                        }`}
                     >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        generalSettings.batchSending ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${generalSettings.batchSending ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
                     </button>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div>
                       <label className="text-sm font-medium text-gray-700">Pausar em caso de erro</label>
@@ -362,13 +359,11 @@ const SettingsPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setGeneralSettings({ ...generalSettings, pauseOnError: !generalSettings.pauseOnError })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        generalSettings.pauseOnError ? 'bg-green-600' : 'bg-gray-300'
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${generalSettings.pauseOnError ? 'bg-green-600' : 'bg-gray-300'
+                        }`}
                     >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        generalSettings.pauseOnError ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${generalSettings.pauseOnError ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
                     </button>
                   </div>
                 </div>
@@ -380,7 +375,7 @@ const SettingsPage: React.FC = () => {
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Configurações de Segurança</h3>
-                
+
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Limite de mensagens por hora</label>
@@ -392,7 +387,7 @@ const SettingsPage: React.FC = () => {
                     />
                     <p className="text-xs text-gray-500 mt-1">Máximo de 1000 mensagens por hora</p>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Limite de mensagens por dia</label>
                     <input
@@ -403,7 +398,7 @@ const SettingsPage: React.FC = () => {
                     />
                     <p className="text-xs text-gray-500 mt-1">Máximo de 5000 mensagens por dia</p>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Delay mínimo (segundos)</label>
                     <input
@@ -415,7 +410,7 @@ const SettingsPage: React.FC = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Delay máximo (segundos)</label>
                     <input
@@ -460,7 +455,7 @@ const SettingsPage: React.FC = () => {
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Configurações de Notificações</h3>
-                
+
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -469,16 +464,14 @@ const SettingsPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setNotificationSettings({ ...notificationSettings, emailNotifications: !notificationSettings.emailNotifications })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        notificationSettings.emailNotifications ? 'bg-green-600' : 'bg-gray-300'
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${notificationSettings.emailNotifications ? 'bg-green-600' : 'bg-gray-300'
+                        }`}
                     >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        notificationSettings.emailNotifications ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.emailNotifications ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
                     </button>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div>
                       <label className="text-sm font-medium text-gray-700">Notificações de conclusão</label>
@@ -486,16 +479,14 @@ const SettingsPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setNotificationSettings({ ...notificationSettings, completionNotifications: !notificationSettings.completionNotifications })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        notificationSettings.completionNotifications ? 'bg-green-600' : 'bg-gray-300'
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${notificationSettings.completionNotifications ? 'bg-green-600' : 'bg-gray-300'
+                        }`}
                     >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        notificationSettings.completionNotifications ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.completionNotifications ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
                     </button>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div>
                       <label className="text-sm font-medium text-gray-700">Alertas de erro</label>
@@ -503,13 +494,11 @@ const SettingsPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setNotificationSettings({ ...notificationSettings, errorAlerts: !notificationSettings.errorAlerts })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        notificationSettings.errorAlerts ? 'bg-green-600' : 'bg-gray-300'
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${notificationSettings.errorAlerts ? 'bg-green-600' : 'bg-gray-300'
+                        }`}
                     >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        notificationSettings.errorAlerts ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.errorAlerts ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
                     </button>
                   </div>
                 </div>
@@ -531,7 +520,7 @@ const SettingsPage: React.FC = () => {
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">API Keys</h3>
-                
+
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Evolution API Key</label>
@@ -565,7 +554,7 @@ const SettingsPage: React.FC = () => {
                       URL base da sua instância Evolution API (ex: http://localhost:8080)
                     </p>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Timeout (segundos)</label>
                     <input
@@ -678,7 +667,7 @@ const SettingsPage: React.FC = () => {
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Configurações do Banco de Dados</h3>
-                
+
                 <div className="bg-gray-50 rounded-lg p-4">
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>

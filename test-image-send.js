@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 async function testSendImage() {
     try {
@@ -65,7 +65,11 @@ async function testSendImage() {
         console.log('Resposta do envio:', JSON.stringify(sendResponse.data, null, 2));
 
     } catch (error) {
-        console.error('Erro no teste:', error.response ? JSON.stringify(error.response.data, null, 2) : error.message);
+        console.error('Erro no teste:', error);
+        if (error.response) {
+            console.error('Status:', error.response.status);
+            console.error('Data:', JSON.stringify(error.response.data, null, 2));
+        }
     }
 }
 

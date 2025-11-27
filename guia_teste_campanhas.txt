@@ -1,0 +1,58 @@
+# Guia: Criar Campanhas pelo Frontend
+
+## Pre-requisitos
+- Servidor rodando: npm run start:ts
+- Frontend compilado: npm run build (ja feito)
+- Navegador aberto em: http://localhost:3006
+- Login feito com: admin@crm.com / admin123
+
+## Teste 1: Campanha de TEXTO
+
+1. Acesse: Campanhas no menu lateral
+2. Clique em: + Nova Campanha
+3. Preencha:
+   - Nome: Teste Texto - [data/hora]
+   - Tipo de Mensagem: Texto
+   - Segmento: Escolha "teste 1"
+   - Mensagem: Ola {nome}, esta e uma mensagem de teste!
+   - Horario: Escolha data/hora atual
+4. Clique em: Criar Campanha
+5. Clique em: Iniciar (icone play)
+6. Verifique: Ver Estatisticas
+
+## Teste 2: Campanha de IMAGEM
+
+1. Clique em: + Nova Campanha
+2. Preencha:
+   - Nome: Teste Imagem
+   - Tipo de Mensagem: Imagem
+   - Segmento: teste 1
+   - Upload: Selecione uma imagem JPG/PNG
+   - Legenda: Imagem de teste
+3. Criar e Iniciar
+
+## Teste 3: Campanha de AUDIO
+
+1. Clique em: + Nova Campanha
+2. Preencha:
+   - Nome: Teste Audio
+   - Tipo de Mensagem: Audio
+   - Upload: Selecione arquivo MP3/OGG
+3. Criar e Iniciar
+
+## Teste 4: Campanha de VIDEO
+
+1. Clique em: + Nova Campanha
+2. Preencha:
+   - Nome: Teste Video
+   - Tipo de Mensagem: Video
+   - Upload: Selecione arquivo MP4
+   - Legenda: Video de teste
+3. Criar e Iniciar
+
+## Verificacoes
+
+Apos cada teste, verifique:
+- Status da campanha muda para scheduled/running
+- Estatisticas mostram: Alvo 1, Enviadas 1
+- Tabela mostra contato com badge "Enviado" (amarelo)

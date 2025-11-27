@@ -49,8 +49,11 @@ export const authenticateToken = async (
       return;
     }
 
+    // Obter segredo dinamicamente (para garantir que pegue o valor atualizado pelo server.ts)
+    const currentSecret = process.env.JWT_SECRET || 'super-secret-jwt-key-2025-simconsult-secure-token-change-in-production';
+
     // Verificar token
-    if (!JWT_SECRET) {
+    if (!currentSecret) {
       res.status(500).json({
         success: false,
         message: 'Erro de configuração do servidor'
@@ -58,7 +61,7 @@ export const authenticateToken = async (
       return;
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as {
+    const decoded = jwt.verify(token, currentSecret) as {
       userId: number;
       email: string;
       role: string;

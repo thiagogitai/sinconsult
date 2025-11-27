@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Play, 
-  Pause, 
-  Edit, 
-  Trash2, 
-  Eye, 
+import {
+  Plus,
+  Play,
+  Pause,
+  Edit,
+  Trash2,
+  Eye,
   Clock,
   MessageSquare,
   Users,
@@ -173,13 +173,13 @@ const Campaigns: React.FC = () => {
     try {
       setUploadingMedia(true);
       const formDataUpload = new FormData();
-      formDataUpload.append('media', file);
-      
+      formDataUpload.append('file', file);
+
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('Token de autenticação não encontrado. Faça login novamente.');
       }
-      
+
       const response = await fetch('/api/upload/media', {
         method: 'POST',
         headers: {
@@ -187,13 +187,13 @@ const Campaigns: React.FC = () => {
         },
         body: formDataUpload
       });
-      
+
       // Verificar se a resposta é JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         const text = await response.text();
         console.error('Resposta não é JSON:', text.substring(0, 200));
-        
+
         if (response.status === 401) {
           throw new Error('Sessão expirada. Faça login novamente.');
         } else if (response.status === 404) {
@@ -202,11 +202,21 @@ const Campaigns: React.FC = () => {
           throw new Error(`Erro no servidor (${response.status}): ${text.substring(0, 100)}`);
         }
       }
-      
+
       const data = await response.json();
-      
+
       if (response.ok && data.success) {
-        setFormData({ ...formData, media_url: data.url });
+        // Detectar tipo de mensagem baseado no retorno do backend
+        let messageType = 'text';
+        if (data.type === 'image') messageType = 'image';
+        else if (data.type === 'video') messageType = 'video';
+        else if (data.type === 'audio') messageType = 'audio_upload';
+
+        setFormData(prev => ({
+          ...prev,
+          media_url: data.url,
+          type: messageType
+        }));
         setMediaPreview(data.url);
         return data.url;
       } else {
@@ -214,14 +224,14 @@ const Campaigns: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Erro ao fazer upload:', error);
-      
+
       let errorMessage = 'Erro ao fazer upload';
       if (error.message) {
         errorMessage = error.message;
       } else if (error instanceof TypeError && error.message.includes('JSON')) {
         errorMessage = 'Erro ao processar resposta do servidor. Verifique se o servidor está funcionando.';
       }
-      
+
       alert(errorMessage);
       throw error;
     } finally {
@@ -606,8 +616,8 @@ const Campaigns: React.FC = () => {
                         <span>{campaign.total_target > 0 ? Math.round(((campaign.total_sent || 0) / campaign.total_target) * 100) : 0}%</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                           style={{ width: `${campaign.total_target > 0 ? ((campaign.total_sent || 0) / campaign.total_target) * 100 : 0}%` }}
                         />
                       </div>
@@ -710,7 +720,7 @@ const Campaigns: React.FC = () => {
                 ×
               </button>
             </div>
-            
+
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Nome da Campanha</label>
@@ -722,7 +732,7 @@ const Campaigns: React.FC = () => {
                   placeholder="Ex: Campanha Matinal - Nutrição"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Canal de Envio</label>
                 <select
@@ -736,24 +746,7 @@ const Campaigns: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo de Mensagem</label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => {
-                      setFormData({ ...formData, type: e.target.value, media_url: '' });
-                      setMediaPreview(null);
-                    }}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
-                    disabled={formData.channel !== 'whatsapp'}
-                  >
-                    <option value="text">Texto</option>
-                    <option value="audio">Áudio (TTS)</option>
-                    <option value="image">Imagem</option>
-                    <option value="video">Vídeo</option>
-                  </select>
-                </div>
+
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Segmento</label>
@@ -768,7 +761,6 @@ const Campaigns: React.FC = () => {
                     <option key={segment.id} value={segment.id}>{segment.name}</option>
                   ))}
                 </select>
-              </div>
               </div>
 
               {/* Configurações SMS */}
@@ -787,7 +779,7 @@ const Campaigns: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Template SMS (Opcional)</label>
                     <select
@@ -845,7 +837,7 @@ const Campaigns: React.FC = () => {
                   </div>
                 </>
               )}
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Horário de Envio</label>
                 <input
@@ -856,7 +848,7 @@ const Campaigns: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
                 <div>
                   <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                     <input
@@ -868,20 +860,6 @@ const Campaigns: React.FC = () => {
                     <div>
                       <span className="text-sm font-semibold text-gray-700">Modo Teste</span>
                       <p className="text-xs text-gray-500">Envia para telefone de teste ou 1 contato</p>
-                    </div>
-                  </label>
-                </div>
-                <div>
-                  <label className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                    <input
-                      type="checkbox"
-                      checked={formData.use_tts}
-                      onChange={(e) => setFormData({ ...formData, use_tts: e.target.checked })}
-                      className="w-4 h-4 text-gray-700 border-gray-300 rounded focus:ring-gray-500"
-                    />
-                    <div>
-                      <span className="text-sm font-semibold text-gray-700">Usar Texto-para-Áudio (TTS)</span>
-                      <p className="text-xs text-gray-500">Transforme texto em áudio automaticamente</p>
                     </div>
                   </label>
                 </div>
@@ -901,129 +879,9 @@ const Campaigns: React.FC = () => {
                 </div>
               )}
 
-              {/* Importar Áudio TTS Salvo */}
-              {formData.use_tts && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Importar Áudio TTS Salvo</label>
-                  <select
-                    value={formData.tts_audio_file}
-                    onChange={(e) => setFormData({ ...formData, tts_audio_file: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
-                  >
-                    <option value="">Selecione um áudio TTS salvo</option>
-                    {savedTTSFiles.map((file) => (
-                      <option key={file.id} value={file.filename}>
-                        {file.texto_original} - {file.duracao}s
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Escolha um áudio previamente gerado no TTS ou digite o texto para gerar um novo
-                  </p>
-                </div>
-              )}
-              
-              {/* Upload de Imagem */}
-              {formData.type === 'image' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Upload de Imagem</label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          handleMediaUpload(file);
-                        }
-                      }}
-                      className="hidden"
-                      id="image-upload"
-                      disabled={uploadingMedia}
-                    />
-                    <label
-                      htmlFor="image-upload"
-                      className="cursor-pointer flex flex-col items-center"
-                    >
-                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-600">
-                        {uploadingMedia ? 'Enviando...' : 'Clique para selecionar uma imagem'}
-                      </span>
-                      <span className="text-xs text-gray-500 mt-1">PNG, JPG, GIF até 10MB</span>
-                    </label>
-                  </div>
-                  {mediaPreview && (
-                    <div className="mt-4">
-                      <img
-                        src={mediaPreview}
-                        alt="Preview"
-                        className="max-w-full h-48 object-contain rounded-lg border border-gray-300"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData({ ...formData, media_url: '' });
-                          setMediaPreview(null);
-                        }}
-                        className="mt-2 text-sm text-red-600 hover:text-red-800"
-                      >
-                        Remover imagem
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {/* Upload de Vídeo */}
-              {formData.type === 'video' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Upload de Vídeo</label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          handleMediaUpload(file);
-                        }
-                      }}
-                      className="hidden"
-                      id="video-upload"
-                      disabled={uploadingMedia}
-                    />
-                    <label
-                      htmlFor="video-upload"
-                      className="cursor-pointer flex flex-col items-center"
-                    >
-                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-600">
-                        {uploadingMedia ? 'Enviando...' : 'Clique para selecionar um vídeo'}
-                      </span>
-                      <span className="text-xs text-gray-500 mt-1">MP4, AVI, MOV até 50MB</span>
-                    </label>
-                  </div>
-                  {mediaPreview && (
-                    <div className="mt-4">
-                      <video
-                        src={mediaPreview}
-                        controls
-                        className="max-w-full h-48 rounded-lg border border-gray-300"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData({ ...formData, media_url: '' });
-                          setMediaPreview(null);
-                        }}
-                        className="mt-2 text-sm text-red-600 hover:text-red-800"
-                      >
-                        Remover vídeo
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+
+
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1034,15 +892,80 @@ const Campaigns: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                   rows={5}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-                  placeholder={formData.type === 'text' 
+                  placeholder={formData.type === 'text'
                     ? "Digite sua mensagem aqui... Use {nome} para personalizar com o nome do contato."
                     : "Digite uma legenda para a imagem/vídeo (opcional)..."
                   }
                 />
                 <p className="text-xs text-gray-500 mt-2">Caracteres: {formData.message.length}</p>
               </div>
+
+              {/* Upload Unificado */}
+              <div className="mt-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Mídia (Opcional)</label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*,video/*,audio/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleMediaUpload(file);
+                      }
+                    }}
+                    className="hidden"
+                    id="media-upload"
+                    disabled={uploadingMedia}
+                  />
+                  <label
+                    htmlFor="media-upload"
+                    className="cursor-pointer flex flex-col items-center"
+                  >
+                    <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                    <span className="text-sm text-gray-600">
+                      {uploadingMedia ? 'Enviando...' : 'Clique para selecionar Imagem, Vídeo ou Áudio'}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">Suporta JPG, PNG, MP4, MP3, OGG</span>
+                  </label>
+                </div>
+
+                {/* Preview da Mídia */}
+                {mediaPreview && (
+                  <div className="mt-4 relative bg-gray-50 p-2 rounded-lg border border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, media_url: '', type: 'text' });
+                        setMediaPreview(null);
+                      }}
+                      className="absolute top-2 right-2 p-1 bg-red-100 text-red-600 rounded-full hover:bg-red-200 z-10"
+                      title="Remover mídia"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+
+                    {formData.type === 'image' && (
+                      <img src={mediaPreview} alt="Preview" className="max-h-48 mx-auto rounded" />
+                    )}
+
+                    {formData.type === 'video' && (
+                      <video src={mediaPreview} controls className="max-h-48 mx-auto rounded" />
+                    )}
+
+                    {(formData.type === 'audio' || formData.type === 'audio_upload') && (
+                      <div className="flex items-center justify-center p-4">
+                        <audio src={mediaPreview} controls className="w-full" />
+                      </div>
+                    )}
+
+                    <p className="text-center text-xs text-gray-500 mt-2">
+                      Tipo detectado: {formData.type === 'audio_upload' ? 'Áudio' : formData.type === 'image' ? 'Imagem' : formData.type === 'video' ? 'Vídeo' : formData.type}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-            
+
             <div className="flex justify-end space-x-3 mt-8">
               <button
                 onClick={() => setShowModal(false)}
@@ -1095,6 +1018,7 @@ const Campaigns: React.FC = () => {
                     <tr>
                       <th className="px-4 py-2 text-left">Nome</th>
                       <th className="px-4 py-2 text-left">Telefone</th>
+                      <th className="px-4 py-2 text-left">Status</th>
                       <th className="px-4 py-2 text-left">Entregue</th>
                       <th className="px-4 py-2 text-left">Lido</th>
                     </tr>
@@ -1104,6 +1028,17 @@ const Campaigns: React.FC = () => {
                       <tr key={row.message_id} className="border-t">
                         <td className="px-4 py-2">{row.name}</td>
                         <td className="px-4 py-2">{row.phone}</td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold
+                            ${row.status === 'read' ? 'bg-blue-100 text-blue-800' :
+                              row.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                                row.status === 'sent' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-gray-100 text-gray-800'}`}>
+                            {row.status === 'read' ? 'Lido' :
+                              row.status === 'delivered' ? 'Entregue' :
+                                row.status === 'sent' ? 'Enviado' : row.status}
+                          </span>
+                        </td>
                         <td className="px-4 py-2">{row.delivered_at || '-'}</td>
                         <td className="px-4 py-2">{row.read_at || '-'}</td>
                       </tr>
@@ -1118,8 +1053,14 @@ const Campaigns: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      const rows = (statsModalData.delivered || []).map((r: any) => [String(r.name||'').trim(), String(r.phone||'').trim(), String(r.delivered_at||'').trim()||'-', String(r.read_at||'').trim()||'-']);
-                      const header = ['Nome','Telefone','Entregue','Lido'];
+                      const rows = (statsModalData.delivered || []).map((r: any) => [
+                        String(r.name || '').trim(),
+                        String(r.phone || '').trim(),
+                        r.status === 'read' ? 'Lido' : r.status === 'delivered' ? 'Entregue' : r.status === 'sent' ? 'Enviado' : r.status,
+                        String(r.delivered_at || '').trim() || '-',
+                        String(r.read_at || '').trim() || '-'
+                      ]);
+                      const header = ['Nome', 'Telefone', 'Status', 'Entregue', 'Lido'];
                       const tsv = [header.join('\t'), ...rows.map(rr => rr.join('\t'))].join('\n');
                       navigator.clipboard.writeText(tsv);
                       setCopiedRows(true);
@@ -1131,9 +1072,15 @@ const Campaigns: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      const rows = (statsModalData.delivered || []).map((r: any) => [String(r.name||'').trim(), String(r.phone||'').trim(), String(r.delivered_at||'').trim()||'-', String(r.read_at||'').trim()||'-']);
-                      const header = ['Nome','Telefone','Entregue','Lido'];
-                      const csv = [header.join(','), ...rows.map(rr => rr.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
+                      const rows = (statsModalData.delivered || []).map((r: any) => [
+                        String(r.name || '').trim(),
+                        String(r.phone || '').trim(),
+                        r.status === 'read' ? 'Lido' : r.status === 'delivered' ? 'Entregue' : r.status === 'sent' ? 'Enviado' : r.status,
+                        String(r.delivered_at || '').trim() || '-',
+                        String(r.read_at || '').trim() || '-'
+                      ]);
+                      const header = ['Nome', 'Telefone', 'Status', 'Entregue', 'Lido'];
+                      const csv = [header.join(','), ...rows.map(rr => rr.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
                       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
@@ -1152,8 +1099,14 @@ const Campaigns: React.FC = () => {
               </div>
               <div className="border rounded-lg p-3 bg-gray-50 max-h-40 overflow-y-auto text-sm text-gray-800">
                 {(() => {
-                  const rows = (statsModalData.delivered || []).map((r: any) => [String(r.name||'').trim(), String(r.phone||'').trim(), String(r.delivered_at||'').trim()||'-', String(r.read_at||'').trim()||'-']);
-                  const header = ['Nome','Telefone','Entregue','Lido'];
+                  const rows = (statsModalData.delivered || []).map((r: any) => [
+                    String(r.name || '').trim(),
+                    String(r.phone || '').trim(),
+                    r.status === 'read' ? 'Lido' : r.status === 'delivered' ? 'Entregue' : r.status === 'sent' ? 'Enviado' : r.status,
+                    String(r.delivered_at || '').trim() || '-',
+                    String(r.read_at || '').trim() || '-'
+                  ]);
+                  const header = ['Nome', 'Telefone', 'Status', 'Entregue', 'Lido'];
                   const view = [header.join(' \t '), ...rows.map(rr => rr.join(' \t '))].join('\n');
                   return view || 'Nenhum dado disponível';
                 })()}

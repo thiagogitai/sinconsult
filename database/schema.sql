@@ -1,181 +1,184 @@
--- Schema PostgreSQL para o sistema SimConsult
--- Migrado de SQLite para PostgreSQL
+-- Schema SQLite para o sistema SimConsult
 
--- Tabela de usuários
+PRAGMA foreign_keys = ON;
+
+-- Tabela de usuarios
 CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  role VARCHAR(50) DEFAULT 'user',
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT DEFAULT 'user',
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabela de contatos
 CREATE TABLE IF NOT EXISTS contacts (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  phone VARCHAR(50) NOT NULL,
-  email VARCHAR(255),
-  segment VARCHAR(100),
-  is_active BOOLEAN DEFAULT TRUE,
-  is_blocked BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  email TEXT,
+  segment TEXT,
+  is_active INTEGER DEFAULT 1,
+  is_blocked INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabela de campanhas
 CREATE TABLE IF NOT EXISTS campaigns (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
   message TEXT NOT NULL,
-  message_type VARCHAR(50) DEFAULT 'text',
+  message_type TEXT DEFAULT 'text',
   media_url TEXT,
-  scheduled_at TIMESTAMP,
-  status VARCHAR(50) DEFAULT 'draft',
-  target_segment VARCHAR(100),
+  scheduled_at DATETIME,
+  status TEXT DEFAULT 'draft',
+  target_segment TEXT,
   created_by INTEGER,
-  is_active BOOLEAN DEFAULT TRUE,
-  use_tts BOOLEAN DEFAULT FALSE,
-  tts_config_id VARCHAR(100),
-  tts_audio_file VARCHAR(255),
-  channel VARCHAR(50) DEFAULT 'whatsapp',
+  is_active INTEGER DEFAULT 1,
+  use_tts INTEGER DEFAULT 0,
+  tts_config_id TEXT,
+  tts_audio_file TEXT,
+  channel TEXT DEFAULT 'whatsapp',
   sms_config_id INTEGER,
   sms_template_id INTEGER,
   email_config_id INTEGER,
-  email_subject VARCHAR(255),
+  email_subject TEXT,
   email_template_id INTEGER,
-  is_test BOOLEAN DEFAULT FALSE,
-  test_phone VARCHAR(50),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  is_test INTEGER DEFAULT 0,
+  test_phone TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabela de mensagens
 CREATE TABLE IF NOT EXISTS messages (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id INTEGER NOT NULL,
   campaign_id INTEGER,
   content TEXT NOT NULL,
-  message_type VARCHAR(50) DEFAULT 'text',
+  message_type TEXT DEFAULT 'text',
   media_url TEXT,
-  status VARCHAR(50) DEFAULT 'pending',
-  sent_at TIMESTAMP,
-  delivered_at TIMESTAMP,
-  read_at TIMESTAMP,
+  status TEXT DEFAULT 'pending',
+  sent_at DATETIME,
+  delivered_at DATETIME,
+  read_at DATETIME,
   error_message TEXT,
-  evolution_id VARCHAR(255),
-  created_at TIMESTAMP DEFAULT NOW()
+  evolution_id TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL,
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL
 );
 
--- Tabela de instâncias WhatsApp
+-- Tabela de instancias WhatsApp
 CREATE TABLE IF NOT EXISTS whatsapp_instances (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  instance_id VARCHAR(255) UNIQUE NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  instance_id TEXT UNIQUE NOT NULL,
   qrcode TEXT,
-  status VARCHAR(50) DEFAULT 'disconnected',
-  phone_connected VARCHAR(50),
-  last_connection TIMESTAMP,
+  status TEXT DEFAULT 'disconnected',
+  phone_connected TEXT,
+  last_connection DATETIME,
   created_by INTEGER,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabela de configurações TTS
+-- Tabela de configuracoes TTS
 CREATE TABLE IF NOT EXISTS tts_configs (
-  id SERIAL PRIMARY KEY,
-  provider VARCHAR(100) NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider TEXT NOT NULL,
   api_key TEXT,
-  voice_id VARCHAR(255),
-  language VARCHAR(10) DEFAULT 'pt-BR',
+  voice_id TEXT,
+  language TEXT DEFAULT 'pt-BR',
   speed REAL DEFAULT 1.0,
   pitch REAL DEFAULT 1.0,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabela de arquivos TTS gerados
 CREATE TABLE IF NOT EXISTS tts_files (
-  id SERIAL PRIMARY KEY,
-  filename VARCHAR(255) NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename TEXT NOT NULL,
   original_text TEXT NOT NULL,
-  provider VARCHAR(100) NOT NULL,
-  voice_id VARCHAR(255) NOT NULL,
+  provider TEXT NOT NULL,
+  voice_id TEXT NOT NULL,
   duration_seconds INTEGER,
   size_kb INTEGER,
   access_count INTEGER DEFAULT 0,
-  expires_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  expires_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabela de templates de mensagens
 CREATE TABLE IF NOT EXISTS message_templates (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
   content TEXT NOT NULL,
   variables TEXT,
-  category VARCHAR(100),
-  message_type VARCHAR(50) DEFAULT 'text',
+  category TEXT,
+  message_type TEXT DEFAULT 'text',
   created_by INTEGER,
-  is_active BOOLEAN DEFAULT TRUE,
+  is_active INTEGER DEFAULT 1,
   usage_count INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabela de logs de atividades
 CREATE TABLE IF NOT EXISTS activity_logs (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER,
-  action VARCHAR(255) NOT NULL,
-  resource_type VARCHAR(100),
+  action TEXT NOT NULL,
+  resource_type TEXT,
   resource_id INTEGER,
   details TEXT,
-  ip_address VARCHAR(50),
+  ip_address TEXT,
   user_agent TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Tabela de configurações SMS
+-- Tabela de configuracoes SMS
 CREATE TABLE IF NOT EXISTS sms_configs (
-  id SERIAL PRIMARY KEY,
-  provider VARCHAR(100) NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  account_sid VARCHAR(255),
-  auth_token VARCHAR(255),
-  from_number VARCHAR(50),
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider TEXT NOT NULL,
+  name TEXT NOT NULL,
+  account_sid TEXT,
+  auth_token TEXT,
+  from_number TEXT,
   api_token TEXT,
-  region VARCHAR(50),
-  access_key_id VARCHAR(255),
-  secret_access_key VARCHAR(255),
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  region TEXT,
+  access_key_id TEXT,
+  secret_access_key TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabela de histórico SMS
+-- Tabela de historico SMS
 CREATE TABLE IF NOT EXISTS sms_messages (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id INTEGER,
   campaign_id INTEGER,
   sms_config_id INTEGER,
-  phone_number VARCHAR(50) NOT NULL,
+  phone_number TEXT NOT NULL,
   message TEXT NOT NULL,
-  provider VARCHAR(100) NOT NULL,
-  provider_message_id VARCHAR(255),
-  status VARCHAR(50) DEFAULT 'pending',
+  provider TEXT NOT NULL,
+  provider_message_id TEXT,
+  status TEXT DEFAULT 'pending',
   cost REAL DEFAULT 0,
   error_message TEXT,
-  sent_at TIMESTAMP,
-  delivered_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW(),
+  sent_at DATETIME,
+  delivered_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL,
   FOREIGN KEY (sms_config_id) REFERENCES sms_configs(id) ON DELETE SET NULL
@@ -183,58 +186,58 @@ CREATE TABLE IF NOT EXISTS sms_messages (
 
 -- Tabela de templates SMS
 CREATE TABLE IF NOT EXISTS sms_templates (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
   content TEXT NOT NULL,
   variables TEXT DEFAULT '[]',
-  category VARCHAR(100) DEFAULT 'marketing',
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  category TEXT DEFAULT 'marketing',
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabela de configurações Email
+-- Tabela de configuracoes Email
 CREATE TABLE IF NOT EXISTS email_configs (
-  id SERIAL PRIMARY KEY,
-  provider VARCHAR(100) NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  host VARCHAR(255),
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider TEXT NOT NULL,
+  name TEXT NOT NULL,
+  host TEXT,
   port INTEGER,
-  secure BOOLEAN DEFAULT FALSE,
-  user VARCHAR(255),
-  password VARCHAR(255),
-  from_email VARCHAR(255),
+  secure INTEGER DEFAULT 0,
+  user TEXT,
+  password TEXT,
+  from_email TEXT,
   api_key TEXT,
-  region VARCHAR(50),
-  access_key_id VARCHAR(255),
-  secret_access_key VARCHAR(255),
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  region TEXT,
+  access_key_id TEXT,
+  secret_access_key TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabela de histórico Email
+-- Tabela de historico Email
 CREATE TABLE IF NOT EXISTS email_messages (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id INTEGER,
   campaign_id INTEGER,
   email_config_id INTEGER,
-  email_address VARCHAR(255) NOT NULL,
-  subject VARCHAR(255) NOT NULL,
+  email_address TEXT NOT NULL,
+  subject TEXT NOT NULL,
   content TEXT NOT NULL,
-  provider VARCHAR(100) NOT NULL,
-  provider_message_id VARCHAR(255),
-  status VARCHAR(50) DEFAULT 'pending',
+  provider TEXT NOT NULL,
+  provider_message_id TEXT,
+  status TEXT DEFAULT 'pending',
   error_message TEXT,
-  sent_at TIMESTAMP,
-  delivered_at TIMESTAMP,
-  opened_at TIMESTAMP,
-  clicked_at TIMESTAMP,
-  bounce_type VARCHAR(50),
-  is_in_quarantine BOOLEAN DEFAULT FALSE,
+  sent_at DATETIME,
+  delivered_at DATETIME,
+  opened_at DATETIME,
+  clicked_at DATETIME,
+  bounce_type TEXT,
+  is_in_quarantine INTEGER DEFAULT 0,
   quarantine_reason TEXT,
-  quarantine_until TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW(),
+  quarantine_until DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL,
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL,
   FOREIGN KEY (email_config_id) REFERENCES email_configs(id) ON DELETE SET NULL
@@ -242,72 +245,72 @@ CREATE TABLE IF NOT EXISTS email_messages (
 
 -- Tabela de descadastros
 CREATE TABLE IF NOT EXISTS unsubscribes (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id INTEGER,
-  channel VARCHAR(50) NOT NULL,
-  email_address VARCHAR(255),
-  phone_number VARCHAR(50),
+  channel TEXT NOT NULL,
+  email_address TEXT,
+  phone_number TEXT,
   reason TEXT,
   custom_message TEXT,
-  unsubscribed_at TIMESTAMP DEFAULT NOW(),
+  unsubscribed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 );
 
 -- Tabela de templates de email
 CREATE TABLE IF NOT EXISTS email_templates (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  subject VARCHAR(255) NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  subject TEXT NOT NULL,
   html_content TEXT,
   text_content TEXT,
   variables TEXT,
-  category VARCHAR(100),
-  is_active BOOLEAN DEFAULT TRUE,
+  category TEXT,
+  is_active INTEGER DEFAULT 1,
   usage_count INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabela de configurações anti-blacklist
+-- Tabela de configuracoes anti-blacklist
 CREATE TABLE IF NOT EXISTS email_anti_blacklist (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   email_config_id INTEGER,
   spf_record TEXT,
   dkim_record TEXT,
   dmarc_record TEXT,
   domain_verification TEXT,
   reputation_score INTEGER DEFAULT 100,
-  last_check TIMESTAMP,
-  is_verified BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
+  last_check DATETIME,
+  is_verified INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (email_config_id) REFERENCES email_configs(id) ON DELETE CASCADE
 );
 
--- Tabela de notificações
+-- Tabela de notificacoes
 CREATE TABLE IF NOT EXISTS notifications (
-  id SERIAL PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER,
-  type VARCHAR(50) DEFAULT 'info',
-  title VARCHAR(255) NOT NULL,
+  type TEXT DEFAULT 'info',
+  title TEXT NOT NULL,
   message TEXT NOT NULL,
-  read BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT NOW(),
+  read INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Tabela de configurações da aplicação
+-- Tabela de configuracoes da aplicacao
 CREATE TABLE IF NOT EXISTS app_settings (
-  id SERIAL PRIMARY KEY,
-  key VARCHAR(255) UNIQUE NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT UNIQUE NOT NULL,
   value TEXT,
-  category VARCHAR(100) DEFAULT 'general',
-  updated_at TIMESTAMP DEFAULT NOW()
+  category TEXT DEFAULT 'general',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Criar índices para performance
+-- Indices
 CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON activity_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
 CREATE INDEX IF NOT EXISTS idx_messages_contact ON messages(contact_id);
 CREATE INDEX IF NOT EXISTS idx_messages_campaign ON messages(campaign_id);
@@ -317,12 +320,12 @@ CREATE INDEX IF NOT EXISTS idx_email_messages_contact ON email_messages(contact_
 CREATE INDEX IF NOT EXISTS idx_unsubscribes_contact ON unsubscribes(contact_id);
 CREATE INDEX IF NOT EXISTS idx_unsubscribes_email ON unsubscribes(email_address);
 
--- Inserir usuário admin padrão
+-- Inserir usuario admin padrao
 INSERT INTO users (name, email, password_hash, role)
 SELECT 'Administrador', 'admin@crm.com', '$2b$10$YourHashHere', 'admin'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@crm.com');
 
--- Inserir configurações padrão da Evolution API
+-- Inserir configuracoes padrao da Evolution API
 INSERT INTO app_settings (key, value, category)
 SELECT 'evolutionApiUrl', 'https://solitarybaboon-evolution.cloudfy.live', 'api'
 WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE key = 'evolutionApiUrl');

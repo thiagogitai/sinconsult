@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Upload, 
-  Download, 
+import {
+  Plus,
+  Search,
+  Filter,
+  Upload,
+  Download,
   Edit,
   Trash2,
   Users,
@@ -23,13 +23,16 @@ const Contacts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingContact, setEditingContact] = useState<any>(null);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
     tags: ''
   });
+  const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const contactsPerPage = 30;
 
   useEffect(() => {
     fetchContacts();
@@ -38,7 +41,7 @@ const Contacts: React.FC = () => {
   const fetchContacts = async () => {
     try {
       setLoading(true);
-      
+
       const token = localStorage.getItem('token');
       if (!token) {
         toast({
@@ -50,7 +53,7 @@ const Contacts: React.FC = () => {
         setLoading(false);
         return;
       }
-      
+
       // Buscar contatos da API
       const response = await fetch('/api/contacts', {
         headers: {
@@ -58,7 +61,7 @@ const Contacts: React.FC = () => {
         }
       });
       const data = await response.json();
-      
+
       if (response.ok) {
         // A API retorna array diretamente, não dentro de data.data
         const contactsList = Array.isArray(data) ? data : (data.data || []);
@@ -70,10 +73,10 @@ const Contacts: React.FC = () => {
           const isBlocked = isBlockedNum === 1 || isBlockedNum === '1' || isBlockedNum === true;
           return {
             ...contact,
-            tags: contact.tags 
-              ? (Array.isArray(contact.tags) 
-                  ? contact.tags 
-                  : (contact.tags.split ? contact.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t) : []))
+            tags: contact.tags
+              ? (Array.isArray(contact.tags)
+                ? contact.tags
+                : (contact.tags.split ? contact.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t) : []))
               : [],
             status: !isBlocked && isActive ? 'active' : 'cancelled'
           };
@@ -112,7 +115,7 @@ const Contacts: React.FC = () => {
         name: formData.name,
         phone: formData.phone,
         email: formData.email,
-        tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()) : []
+        segment: formData.tags ? formData.tags.trim() : ''
       };
 
       const response = await fetch('/api/contacts', {
@@ -125,7 +128,7 @@ const Contacts: React.FC = () => {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
         toast({
           title: 'Sucesso',
@@ -158,7 +161,7 @@ const Contacts: React.FC = () => {
       name: contact.name,
       phone: contact.phone,
       email: contact.email || '',
-      tags: contact.tags ? contact.tags.join(', ') : ''
+      tags: contact.segment || ''
     });
     setShowModal(true);
   };
@@ -181,8 +184,10 @@ const Contacts: React.FC = () => {
         name: formData.name,
         phone: formData.phone,
         email: formData.email,
-        tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()) : []
+        segment: formData.tags ? formData.tags.trim() : ''
       };
+
+      console.log('Enviando dados de atualização:', contactData);
 
       const response = await fetch(`/api/contacts/${editingContact.id}`, {
         method: 'PUT',
@@ -194,7 +199,7 @@ const Contacts: React.FC = () => {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
         toast({
           title: 'Sucesso',
@@ -221,6 +226,79 @@ const Contacts: React.FC = () => {
     }
   };
 
+  const toggleSelectAll = () => {
+    if (selectedContacts.size === contacts.length) {
+      setSelectedContacts(new Set());
+    } else {
+      setSelectedContacts(new Set(contacts.map(c => c.id)));
+    }
+  };
+
+  const toggleSelectContact = (id: number) => {
+    const newSelected = new Set(selectedContacts);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedContacts(newSelected);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedContacts.size === 0) {
+      toast({
+        title: 'Aviso',
+        description: 'Selecione pelo menos um contato para deletar',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!confirm(`Tem certeza que deseja deletar ${selectedContacts.size} contato(s)?`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const contactId of selectedContacts) {
+        try {
+          const response = await fetch(`/api/contacts/${contactId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      toast({
+        title: 'Sucesso',
+        description: `${successCount} contato(s) deletado(s) com sucesso${errorCount > 0 ? `. ${errorCount} falha(s).` : ''}`,
+      });
+
+      setSelectedContacts(new Set());
+      fetchContacts();
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao deletar contatos',
+        variant: 'destructive'
+      });
+    }
+  };
+
+
   const handleDeleteContact = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este contato?')) return;
 
@@ -243,7 +321,7 @@ const Contacts: React.FC = () => {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
         toast({
           title: 'Sucesso',
@@ -290,9 +368,21 @@ const Contacts: React.FC = () => {
 
   const filteredContacts = contacts.filter(contact => {
     const matchesSearch = contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         contact.phone.includes(searchTerm);
+      contact.phone.includes(searchTerm);
     return matchesSearch;
   });
+
+  // Paginação
+  const totalPages = Math.ceil(filteredContacts.length / contactsPerPage);
+  const startIndex = (currentPage - 1) * contactsPerPage;
+  const endIndex = startIndex + contactsPerPage;
+  const paginatedContacts = filteredContacts.slice(startIndex, endIndex);
+
+  // Resetar para página 1 quando filtrar
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
 
   if (loading) {
     return (
@@ -331,12 +421,28 @@ const Contacts: React.FC = () => {
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
             <button
+              onClick={() => window.location.href = '/import'}
+              className="bg-blue-600 text-white hover:bg-blue-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
+            >
+              <Upload className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span>Importar</span>
+            </button>
+            <button
               onClick={handleExportExcel}
               className="bg-gray-700 text-white hover:bg-gray-800 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
             >
               <Download className="h-4 w-4 sm:h-5 sm:w-5" />
               <span>Exportar</span>
             </button>
+            {selectedContacts.size > 0 && (
+              <button
+                onClick={handleDeleteSelected}
+                className="bg-red-600 text-white hover:bg-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
+              >
+                <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span>Deletar ({selectedContacts.size})</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 setEditingContact(null);
@@ -441,6 +547,18 @@ const Contacts: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedContacts.size === contacts.length && contacts.length > 0}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
+                      title="Selecionar todos"
+                    />
+                    <span className="text-xs font-medium text-gray-500 uppercase">Sel.</span>
+                  </div>
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contato</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tags</th>
@@ -449,8 +567,16 @@ const Contacts: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredContacts.map((contact) => (
+              {paginatedContacts.map((contact) => (
                 <tr key={contact.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedContacts.has(contact.id)}
+                      onChange={() => toggleSelectContact(contact.id)}
+                      className="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                    />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
@@ -491,11 +617,10 @@ const Contacts: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                      contact.status === 'active' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${contact.status === 'active'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
+                      }`}>
                       {contact.status === 'active' ? 'Ativo' : 'Cancelado'}
                     </span>
                   </td>
@@ -522,6 +647,64 @@ const Contacts: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Paginação */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                Mostrando <span className="font-semibold">{startIndex + 1}</span> a{' '}
+                <span className="font-semibold">{Math.min(endIndex, filteredContacts.length)}</span> de{' '}
+                <span className="font-semibold">{filteredContacts.length}</span> contatos
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Anterior
+                </button>
+
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === pageNum
+                          ? 'bg-green-600 text-white'
+                          : 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+                          }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Próxima
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit Contact Modal */}
@@ -544,7 +727,7 @@ const Contacts: React.FC = () => {
                 ×
               </button>
             </div>
-            
+
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Nome *</label>
@@ -556,7 +739,7 @@ const Contacts: React.FC = () => {
                   placeholder="Nome completo"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone *</label>
                 <input
@@ -567,7 +750,7 @@ const Contacts: React.FC = () => {
                   placeholder="+55 11 98765-4321"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
                 <input
@@ -578,7 +761,7 @@ const Contacts: React.FC = () => {
                   placeholder="email@exemplo.com"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Tags</label>
                 <input
@@ -590,7 +773,7 @@ const Contacts: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             <div className="flex justify-end space-x-3 mt-8">
               <button
                 onClick={() => setShowModal(false)}

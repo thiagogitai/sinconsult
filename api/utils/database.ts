@@ -1,127 +1,92 @@
-import pg from 'pg';
+import sqlite3 from 'sqlite3';
+import { open, type Database } from 'sqlite';
+import fs from 'fs';
+import path from 'path';
 import { logger } from './logger.js';
 
-const { Pool } = pg;
-
-let pool: pg.Pool | null = null;
+let db: Database<sqlite3.Database, sqlite3.Statement> | null = null;
 
 /**
- * Inicializa o pool de conexões PostgreSQL
+ * Inicializa a conexao com SQLite (arquivo local)
  */
 export async function initDatabase(): Promise<void> {
-    try {
-        const databaseUrl = process.env.DATABASE_URL;
+  if (db) return;
 
-        if (!databaseUrl) {
-            throw new Error('DATABASE_URL não está definida no .env');
-        }
+  const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'database.sqlite');
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 
-        pool = new Pool({
-            connectionString: databaseUrl,
-            max: 20,
-            idleTimeoutMillis: 30000,
-            connectionTimeoutMillis: 2000,
-        });
+  db = await open({
+    filename: dbPath,
+    driver: sqlite3.Database,
+  });
 
-        // Testar conexão
-        const client = await pool.connect();
-        await client.query('SELECT NOW()');
-        client.release();
+  // Garantir integracao de chaves estrangeiras e performance melhor
+  await db.exec('PRAGMA foreign_keys = ON;');
+  await db.exec('PRAGMA journal_mode = WAL;');
 
-        logger.info('✅ Conectado ao PostgreSQL com sucesso!');
-    } catch (error) {
-        logger.error('❌ Erro ao conectar ao PostgreSQL:', { error });
-        throw error;
-    }
+  logger.info(`SQLite conectado em ${dbPath}`);
 }
 
 /**
- * Converte placeholders SQLite (?) para PostgreSQL ($1, $2, ...)
- */
-function convertPlaceholders(query: string, params: any[]): { text: string; values: any[] } {
-    let paramIndex = 1;
-    const text = query.replace(/\?/g, () => `$${paramIndex++}`);
-    return { text, values: params };
-}
-
-/**
- * Executa uma query que retorna múltiplas linhas
+ * Executa uma query que retorna multiplas linhas
  */
 export async function dbAll<T = any>(query: string, params: any[] = []): Promise<T[]> {
-    if (!pool) {
-        throw new Error('Database não foi inicializado. Chame initDatabase() primeiro.');
-    }
+  if (!db) throw new Error('Database n�o foi inicializado. Chame initDatabase() primeiro.');
 
-    try {
-        const { text, values } = convertPlaceholders(query, params);
-        const result = await pool.query(text, values);
-        return result.rows as T[];
-    } catch (error) {
-        logger.error('Erro em dbAll:', { query, params, error });
-        throw error;
-    }
+  try {
+    return await db.all<T[]>(query, params);
+  } catch (error) {
+    logger.error('Erro em dbAll:', { query, params, error });
+    throw error;
+  }
 }
 
 /**
- * Executa uma query que retorna uma única linha
+ * Executa uma query que retorna uma unica linha
  */
 export async function dbGet<T = any>(query: string, params: any[] = []): Promise<T | null> {
-    if (!pool) {
-        throw new Error('Database não foi inicializado. Chame initDatabase() primeiro.');
-    }
+  if (!db) throw new Error('Database n�o foi inicializado. Chame initDatabase() primeiro.');
 
-    try {
-        const { text, values } = convertPlaceholders(query, params);
-        const result = await pool.query(text, values);
-        return result.rows[0] || null;
-    } catch (error) {
-        logger.error('Erro em dbGet:', { query, params, error });
-        throw error;
-    }
+  try {
+    const result = await db.get<T>(query, params);
+    return result ?? null;
+  } catch (error) {
+    logger.error('Erro em dbGet:', { query, params, error });
+    throw error;
+  }
 }
 
 /**
- * Executa uma query de modificação (INSERT, UPDATE, DELETE)
+ * Executa uma query de modifica��o (INSERT, UPDATE, DELETE)
  */
 export async function dbRun(
-    query: string,
-    params: any[] = []
+  query: string,
+  params: any[] = []
 ): Promise<{ lastID?: number; changes: number }> {
-    if (!pool) {
-        throw new Error('Database não foi inicializado. Chame initDatabase() primeiro.');
-    }
+  if (!db) throw new Error('Database n�o foi inicializado. Chame initDatabase() primeiro.');
 
-    try {
-        const { text, values } = convertPlaceholders(query, params);
-
-        // Se for INSERT, adicionar RETURNING id para obter lastID
-        let finalQuery = text;
-        if (text.trim().toUpperCase().startsWith('INSERT')) {
-            // Verificar se já tem RETURNING
-            if (!text.toUpperCase().includes('RETURNING')) {
-                finalQuery = `${text} RETURNING id`;
-            }
-        }
-
-        const result = await pool.query(finalQuery, values);
-
-        return {
-            lastID: result.rows[0]?.id,
-            changes: result.rowCount || 0
-        };
-    } catch (error) {
-        logger.error('Erro em dbRun:', { query, params, error });
-        throw error;
-    }
+  try {
+    const result = await db.run(query, params);
+    return {
+      lastID: result?.lastID,
+      changes: result?.changes ?? 0,
+    };
+  } catch (error) {
+    logger.error('Erro em dbRun:', { query, params, error });
+    throw error;
+  }
 }
 
 /**
- * Fecha o pool de conexões
+ * Fecha a conexao SQLite
  */
 export async function closeDatabase(): Promise<void> {
-    if (pool) {
-        await pool.end();
-        pool = null;
-        logger.info('Pool de conexões PostgreSQL fechado');
-    }
+  if (db) {
+    await db.close();
+    db = null;
+    logger.info('Conexao com SQLite fechada');
+  }
 }

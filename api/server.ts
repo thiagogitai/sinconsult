@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-// PostgreSQL via módulo adaptador
+// Banco via adaptador SQLite
 import { initDatabase, dbGet, dbAll, dbRun } from './utils/database.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -278,7 +278,7 @@ async function createNotification(userId: number | null, type: string, title: st
   try {
     await dbRun(`
       INSERT INTO notifications (user_id, type, title, message, read, created_at)
-      VALUES (?, ?, ?, ?, ?, NOW())
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [userId, type, title, message, false]);
 
     console.log(`✅ Notificação criada: ${title} - ${message}`);
@@ -336,15 +336,19 @@ const uploadVideo = multer({
   }
 });
 
-// Upload para mídia (imagens e vídeos)
+// Upload para mídia (imagens, vídeos e áudio)
 const uploadMedia = multer({
   storage: storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limite
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+    if (
+      file.mimetype.startsWith('image/') ||
+      file.mimetype.startsWith('video/') ||
+      file.mimetype.startsWith('audio/')
+    ) {
       cb(null, true);
     } else {
-      cb(new Error('Apenas arquivos de imagem ou vídeo são permitidos'));
+      cb(new Error('Apenas arquivos de imagem, vídeo ou áudio são permitidos'));
     }
   }
 });
@@ -396,8 +400,8 @@ app.post('/api/auth/login', authRateLimiter, validate(schemas.login), asyncHandl
         email: user.email,
         role: user.role
       },
-      process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production',
-      { expiresIn: '24h' }
+      process.env.JWT_SECRET || 'super-secret-jwt-key-2025-simconsult-secure-token-change-in-production',
+      { expiresIn: '7d' }
     );
 
     // Registrar log de atividade
@@ -454,52 +458,48 @@ app.post('/api/auth/logout', authenticateToken, asyncHandler(async (req, res) =>
 }));
 
 // Verificar token
+// Verificar token
 app.get('/api/auth/verify', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const userId = (req as any).user?.userId;
 
-    if (!token) {
+    if (!userId) {
       return res.status(401).json({
         success: false,
-        message: 'Token não fornecido'
+        message: 'Token inválido'
       });
     }
 
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production') as any;
+    const user = await dbGet('SELECT id, name, email, role FROM users WHERE id = ? AND is_active = true', [userId]);
 
-      const user = await dbGet('SELECT id, name, email, role FROM users WHERE id = ? AND is_active = true', [decoded.userId]);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuário não encontrado ou inativo'
+      });
+    }
 
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuário não encontrado ou inativo'
-        });
-      }
-
-      res.json({
-        success: true,
-        data: {
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role
-          }
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
         }
-      });
+      }
+    });
 
-    } catch (error) {
-      return res.status(401).json({
-        success: false,
-        message: 'Token inválido ou expirado'
-      });
-    }
   } catch (error) {
     logger.error('Erro ao verificar token:', { error });
-    throw error;
+    return res.status(401).json({
+      success: false,
+      message: 'Token inválido ou expirado'
+    });
   }
 }));
+
 
 // ===== ROTAS DO DASHBOARD =====
 
@@ -591,8 +591,8 @@ app.get('/api/dashboard/whatsapp-status', authenticateToken, asyncHandler(async 
 
 // ===== ROTAS DE CAMPANHAS =====
 
-// Upload de mídia (requer autenticação)
-app.post('/api/upload/media', authenticateToken, uploadMedia.single('media'), asyncHandler(async (req, res) => {
+// Upload de mídia unificado (imagem, vídeo, áudio)
+app.post('/api/upload/media', authenticateToken, uploadMedia.single('file'), asyncHandler(async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -601,19 +601,22 @@ app.post('/api/upload/media', authenticateToken, uploadMedia.single('media'), as
       });
     }
 
-    // Construir URL do arquivo
-    // O frontend espera a URL relativa ou absoluta. Vamos retornar relativa pois o buildAbsoluteUrl é usado na criação da campanha
-    const fileUrl = `/uploads/${req.file.filename}`;
+    const fileUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req);
+    const mimetype = req.file.mimetype;
+    let type = 'unknown';
 
-    logger.info('Upload realizado com sucesso:', {
-      filename: req.file.filename,
-      size: req.file.size,
-      mimetype: req.file.mimetype
-    });
+    if (mimetype.startsWith('image/')) type = 'image';
+    else if (mimetype.startsWith('video/')) type = 'video';
+    else if (mimetype.startsWith('audio/')) type = 'audio';
+
+    logger.info(`Upload de mídia realizado: ${req.file.filename} (${type})`);
 
     res.json({
       success: true,
-      url: fileUrl
+      url: fileUrl,
+      filename: req.file.filename,
+      mimetype: mimetype,
+      type: type
     });
   } catch (error) {
     logger.error('Erro no upload de mídia:', { error });
@@ -682,6 +685,8 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       message_type,
       schedule_time,
       scheduled_at,  // Aceitar também 'scheduled_at'
+      segment_id,  // Segmento alvo
+      target_segment, // Segmento alvo (novo)
       use_tts,
       tts_config_id,
       tts_audio_file,
@@ -747,28 +752,29 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         });
         return res.status(400).json({
           success: false,
-          error: 'Campanha de imagem/vídeo precisa ter uma mídia enviada ou uma mensagem (legenda)',
-          received: { message_type, media_url: finalMediaUrl, message: finalMessage }
+          error: 'Para campanhas de imagem/vídeo, é necessário fornecer uma URL de mídia ou uma mensagem (legenda)',
+          received: { message_type, finalMediaUrl }
         });
       }
     }
 
-    let normalizedSchedule: string | null = null;
-    if (finalScheduleTime && typeof finalScheduleTime === 'string') {
-      const s = finalScheduleTime.replace('T', ' ').trim();
-      normalizedSchedule = s.length === 16 ? `${s}:00` : s;
-    }
-    const requestedStatus = (req.body as any).status;
-    const initialStatus = (requestedStatus === 'scheduled' || !!normalizedSchedule) ? 'scheduled' : 'draft';
+    // Normalizar data de agendamento
+    let normalizedSchedule = null;
+    let initialStatus = 'draft';
 
-    logger.info('Dados finais para inserção:', {
-      name,
-      message: finalMessage,
-      message_type: message_type || 'text',
-      scheduled_at: normalizedSchedule,
-      media_url: finalMediaUrl,
-      status: initialStatus
-    });
+    if (finalScheduleTime) {
+      try {
+        const date = new Date(finalScheduleTime);
+        if (!isNaN(date.getTime())) {
+          normalizedSchedule = date.toISOString();
+          // Se a data for futura, status é scheduled. Se for passada ou presente, pode ser executada imediatamente (mas vamos manter scheduled para o cron pegar)
+          initialStatus = 'scheduled';
+        }
+      } catch (e) {
+        logger.warn('Data de agendamento inválida:', finalScheduleTime);
+      }
+    }
+
     const result = await dbRun(`
       INSERT INTO campaigns (
         name, 
@@ -776,6 +782,7 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         message_type, 
         scheduled_at, 
         status,
+        target_segment,
         use_tts, 
         tts_config_id, 
         tts_audio_file,
@@ -789,13 +796,14 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         is_test,
         test_phone
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       name.trim(),
       finalMessage,
       message_type || 'text',
       normalizedSchedule,
       initialStatus,
+      target_segment || segment_id || null,
       use_tts || false,
       finalTtsConfigId,
       finalTtsAudioFile,
@@ -1026,10 +1034,10 @@ app.get('/api/campaigns/:id/stats', authenticateToken, asyncHandler(async (req, 
     `, [id]);
 
     const deliveredList = await dbAll(`
-      SELECT m.id as message_id, c.name, c.phone, m.sent_at, m.delivered_at, m.read_at
+      SELECT m.id as message_id, c.name, c.phone, m.sent_at, m.delivered_at, m.read_at, m.status
       FROM messages m
       JOIN contacts c ON c.id = m.contact_id
-      WHERE m.campaign_id = ? AND m.status IN ('delivered','read')
+      WHERE m.campaign_id = ? AND m.status IN ('sent', 'delivered', 'read')
       ORDER BY m.delivered_at DESC NULLS LAST, m.read_at DESC NULLS LAST, m.sent_at DESC
       LIMIT 100
     `, [id]);
@@ -1088,15 +1096,8 @@ app.post('/api/campaigns/:id/start', authenticateToken, asyncHandler(async (req,
 
     let contactIds: string[] = [];
 
-    // Se não houver segmento definido e não for teste, não enviar para ninguém
-    if (!campaign.target_segment || campaign.target_segment.trim() === '') {
-      if (!campaign.is_test) {
-        logger.warn(`Campanha ${campaign.id} sem segmento definido. Nenhum contato será incluído.`);
-        // Retornar erro ou lista vazia
-        contactIds = [];
-      }
-    } else {
-      // Buscar contatos do segmento específico
+    // Se houver segmento definido, buscar apenas contatos desse segmento
+    if (campaign.target_segment && campaign.target_segment.trim() !== '') {
       const contacts = await dbAll(`
         SELECT id FROM contacts 
         WHERE segment = ?
@@ -1104,6 +1105,17 @@ app.post('/api/campaigns/:id/start', authenticateToken, asyncHandler(async (req,
           AND is_active = true
       `, [campaign.target_segment]);
       contactIds = contacts.map((c: any) => String(c.id));
+    } else {
+      // Se não houver segmento, buscar TODOS os contatos ativos (exceto se for teste)
+      if (!campaign.is_test) {
+        const contacts = await dbAll(`
+          SELECT id FROM contacts 
+          WHERE (is_blocked = 0 OR is_blocked IS NULL)
+            AND (is_active = 1 OR is_active IS NULL)
+        `);
+        contactIds = contacts.map((c: any) => String(c.id));
+        logger.info(`Campanha ${campaign.id} sem segmento: enviando para ${contactIds.length} contatos`);
+      }
     }
 
     if (campaign.is_test) {
@@ -1316,7 +1328,7 @@ app.get('/api/contacts', authenticateToken, asyncHandler(async (req, res) => {
 
     if (status) {
       query += ` AND is_active = ?`;
-      params.push(status === 'active' ? 1 : 0);
+      params.push(status === 'active' ? true : false);
     }
 
     // Filtrar bloqueados (por padrão não mostra bloqueados)
@@ -1346,7 +1358,7 @@ app.patch('/api/contacts/:id/block', authenticateToken, asyncHandler(async (req,
       UPDATE contacts 
       SET is_blocked = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [blocked ? 1 : 0, id]);
+    `, [blocked ? true : false, id]);
 
     const updatedContact = await dbGet('SELECT * FROM contacts WHERE id = ?', [id]);
     res.json(updatedContact);
@@ -1399,10 +1411,115 @@ app.get('/api/contacts/export', authenticateToken, asyncHandler(async (req, res)
   }
 }));
 
+// Importar contatos (requer autenticação)
+app.post('/api/contacts/import', authenticateToken, upload.single('file'), asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhum arquivo enviado'
+      });
+    }
+
+    const filePath = req.file.path;
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+    let importedCount = 0;
+    let updatedCount = 0;
+    let errorCount = 0;
+    const errors: any[] = [];
+
+    for (const row of data) {
+      try {
+        // Mapear colunas flexivelmente
+        const name = row['Nome'] || row['nome'] || row['Name'] || row['name'] || row['Contact Name'] || '';
+        let phone = row['Telefone'] || row['telefone'] || row['Phone'] || row['phone'] || row['Whatsapp'] || row['whatsapp'] || row['Mobile'] || '';
+        const email = row['Email'] || row['email'] || row['E-mail'] || '';
+        // Usar coluna do Excel ou o fallback do corpo da requisição (tag global)
+        const segment = row['Segmento'] || row['segmento'] || row['Segment'] || row['segment'] || row['Tags'] || row['tags'] || req.body.tag || '';
+
+        if (!phone) {
+          errorCount++;
+          errors.push({ row, error: 'Telefone não encontrado' });
+          continue;
+        }
+
+        // Normalizar telefone
+        // Remover tudo que não é dígito
+        phone = String(phone).replace(/\D/g, '');
+
+        // Adicionar DDI 55 se não tiver (assumindo Brasil se tiver 10 ou 11 dígitos)
+        if (phone.length === 10 || phone.length === 11) {
+          phone = '55' + phone;
+        }
+
+        const phoneValidation = validatePhone(phone);
+        if (!phoneValidation.isValid) {
+          errorCount++;
+          errors.push({ row, error: phoneValidation.error });
+          continue;
+        }
+
+        const normalizedPhone = normalizePhone(phone);
+
+        // Verificar se já existe
+        const existing = await dbGet('SELECT id FROM contacts WHERE phone = ?', [normalizedPhone]);
+
+        if (existing) {
+          // Atualizar
+          await dbRun(`
+            UPDATE contacts 
+            SET name = COALESCE(?, name), 
+                email = COALESCE(?, email), 
+                segment = COALESCE(?, segment),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [name || null, email || null, segment || null, existing.id]);
+          updatedCount++;
+        } else {
+          // Inserir
+          await dbRun(`
+            INSERT INTO contacts (name, phone, email, segment, is_active, is_blocked)
+            VALUES (?, ?, ?, ?, true, false)
+          `, [name || 'Sem Nome', normalizedPhone, email || null, segment || null]);
+          importedCount++;
+        }
+
+      } catch (err: any) {
+        errorCount++;
+        errors.push({ row, error: err.message });
+      }
+    }
+
+    // Remover arquivo temporário
+    fs.unlinkSync(filePath);
+
+    res.json({
+      success: true,
+      message: 'Importação concluída',
+      imported: importedCount,
+      updated: updatedCount,
+      failed: errorCount,
+      errors: errors.slice(0, 20) // Limitar erros no retorno
+    });
+
+  } catch (error) {
+    logger.error('Erro na importação de contatos:', { error });
+    // Tentar remover arquivo em caso de erro
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    throw error;
+  }
+}));
+
 // Adicionar contato (requer autenticação)
 app.post('/api/contacts', authenticateToken, validate(schemas.createContact), asyncHandler(async (req, res) => {
   try {
-    const { name, phone, email, tags, custom_fields } = req.body;
+    const { name, phone, email, tags, segment, custom_fields } = req.body;
 
     // Validar telefone
     const phoneValidation = validatePhone(phone);
@@ -1425,15 +1542,86 @@ app.post('/api/contacts', authenticateToken, validate(schemas.createContact), as
       });
     }
 
+    // Usar segment se fornecido, senão usar tags (retrocompatibilidade)
+    const contactSegment = segment || tags || '';
+
     const result = await dbRun(`
       INSERT INTO contacts (name, phone, email, segment, is_active, is_blocked)
       VALUES (?, ?, ?, ?, true, false)
-    `, [name, normalizedPhone, email || null, tags || '']);
+    `, [name, normalizedPhone, email || null, contactSegment]);
 
     const newContact = await dbGet('SELECT * FROM contacts WHERE id = ?', [result.lastID]);
     res.json(newContact);
   } catch (error) {
     logger.error('Erro ao criar contato:', { error });
+    throw error;
+  }
+}));
+
+// Atualizar contato (requer autenticação)
+app.put('/api/contacts/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, email, tags, segment } = req.body;
+
+    // Verificar se contato existe
+    const existing = await dbGet('SELECT * FROM contacts WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contato não encontrado'
+      });
+    }
+
+    // Se phone foi fornecido, validar e normalizar
+    let normalizedPhone = existing.phone;
+    if (phone && phone !== existing.phone) {
+      const phoneValidation = validatePhone(phone);
+      if (!phoneValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          error: phoneValidation.error || 'Telefone inválido'
+        });
+      }
+      normalizedPhone = normalizePhone(phone);
+
+      // Verificar se novo telefone já existe em outro contato
+      const phoneExists = await dbGet('SELECT id FROM contacts WHERE phone = ? AND id != ?', [normalizedPhone, id]);
+      if (phoneExists) {
+        return res.status(400).json({
+          success: false,
+          error: 'Já existe outro contato com este telefone'
+        });
+      }
+    }
+
+    // Usar segment se fornecido, senão usar tags (retrocompatibilidade)
+    const contactSegment = segment !== undefined ? segment : (tags !== undefined ? tags : existing.segment);
+
+    logger.info('PUT /api/contacts/:id - Dados recebidos:', {
+      id,
+      body: req.body,
+      existing_segment: existing.segment,
+      new_segment: contactSegment
+    });
+
+    await dbRun(`
+      UPDATE contacts 
+      SET name = ?, phone = ?, email = ?, segment = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [
+      name !== undefined ? name : existing.name,
+      normalizedPhone,
+      email !== undefined ? email : existing.email,
+      contactSegment,
+      id
+    ]);
+
+    const updatedContact = await dbGet('SELECT * FROM contacts WHERE id = ?', [id]);
+    logger.info('PUT /api/contacts/:id - Contato atualizado:', updatedContact);
+    res.json(updatedContact);
+  } catch (error) {
+    logger.error('Erro ao atualizar contato:', { error });
     throw error;
   }
 }));
@@ -1597,66 +1785,7 @@ app.post('/api/upload/video', authenticateToken, uploadVideo.single('video'), as
   }
 }));
 
-// Upload de mídia genérica (imagem ou vídeo) para campanhas (requer autenticação)
-app.post('/api/upload/media', authenticateToken, (req, res, next) => {
-  logger.info('Upload de mídia iniciado', {
-    contentType: req.headers['content-type'],
-    hasFile: !!req.file
-  });
 
-  uploadMedia.single('media')(req, res, (err: any) => {
-    if (err) {
-      logger.error('Erro no multer:', { error: err.message });
-      return res.status(400).json({
-        success: false,
-        error: err.message || 'Erro ao processar arquivo'
-      });
-    }
-    next();
-  });
-}, asyncHandler(async (req, res) => {
-  try {
-    logger.info('Processando upload de mídia', {
-      hasFile: !!req.file,
-      filename: req.file?.filename,
-      size: req.file?.size
-    });
-
-    if (!req.file) {
-      logger.warn('Upload de mídia sem arquivo');
-      return res.status(400).json({
-        success: false,
-        error: 'Nenhum arquivo enviado'
-      });
-    }
-
-    const mediaUrl = buildAbsoluteUrl(`/api/uploads/${req.file.filename}`, req as Request);
-
-    logger.info('Upload de mídia concluído com sucesso', { url: mediaUrl });
-
-    res.json({
-      success: true,
-      url: mediaUrl,
-      filename: req.file.filename,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-      type: req.file.mimetype.startsWith('image/') ? 'image' : 'video'
-    });
-  } catch (error: any) {
-    logger.error('Erro ao fazer upload de mídia:', {
-      error: error.message,
-      stack: error.stack
-    });
-
-    // Garantir que sempre retorna JSON
-    if (!res.headersSent) {
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Erro ao fazer upload de mídia'
-      });
-    }
-  }
-}));
 
 // ===== ROTAS DE IMPORTAÇÃO EXCEL =====
 
@@ -1724,7 +1853,7 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), asyncHan
         if (!existing) {
           await dbRun(`
             INSERT INTO contacts (name, phone, email, segment, is_active)
-            VALUES (?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, true)
           `, [finalName, normalizedPhone, email || null, tag || null]);
         } else if (tag && (!existing.segment || String(existing.segment).trim() === '')) {
           await dbRun('UPDATE contacts SET segment = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [tag, existing.id]);
@@ -2570,7 +2699,7 @@ app.post('/api/email/send', authenticateToken, validate(schemas.sendEmail), asyn
       SELECT * FROM email_messages 
       WHERE email_address = ? 
         AND is_in_quarantine = 1 
-        AND (quarantine_until IS NULL OR quarantine_until > NOW())
+        AND (quarantine_until IS NULL OR quarantine_until > CURRENT_TIMESTAMP)
       ORDER BY created_at DESC
       LIMIT 1
     `, [email_address]);
@@ -2674,7 +2803,7 @@ app.post('/api/email/send', authenticateToken, validate(schemas.sendEmail), asyn
           UPDATE email_messages 
           SET is_in_quarantine = 1,
               quarantine_reason = ?,
-              quarantine_until = NOW() + INTERVAL '7 days',
+              quarantine_until = datetime('now', '+7 days'),
               bounce_type = 'hard'
           WHERE id = ?
         `, [emailResult.error, messageResult.lastID]);
@@ -2977,7 +3106,7 @@ app.get('/api/email/quarantine', authenticateToken, asyncHandler(async (req, res
         MAX(created_at) as last_attempt
       FROM email_messages
       WHERE is_in_quarantine = 1
-        AND (quarantine_until IS NULL OR quarantine_until > NOW())
+        AND (quarantine_until IS NULL OR quarantine_until > CURRENT_TIMESTAMP)
       GROUP BY email_address
       ORDER BY last_attempt DESC
     `);
@@ -3054,14 +3183,14 @@ app.put('/api/email/anti-blacklist/:config_id', authenticateToken, asyncHandler(
             dkim_record = ?,
             dmarc_record = ?,
             domain_verification = ?,
-            last_check = NOW(),
-            updated_at = NOW()
+            last_check = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
         WHERE email_config_id = ?
       `, [spf_record, dkim_record, dmarc_record, domain_verification, config_id]);
     } else {
       await dbRun(`
         INSERT INTO email_anti_blacklist (email_config_id, spf_record, dkim_record, dmarc_record, domain_verification, last_check)
-        VALUES (?, ?, ?, ?, ?, NOW())
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [config_id, spf_record, dkim_record, dmarc_record, domain_verification]);
     }
 
@@ -3208,7 +3337,7 @@ app.post('/api/tts/generate', authenticateToken, validate(schemas.generateTTS), 
     // Salvar informações no banco de dados
     const result = await dbRun(`
       INSERT INTO tts_files (filename, original_text, provider, voice_id, duration_seconds, size_kb, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, NOW())
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [filename, text, provider, voice, duration, sizeKB]);
 
     res.json({
@@ -3651,8 +3780,8 @@ app.post('/api/settings', authenticateToken, asyncHandler(async (req, res) => {
       const value = String(val);
       const cat = (key === 'evolutionApiUrl' || key === 'evolutionApiKey') ? 'api' : category;
       await dbRun(
-        `INSERT INTO app_settings (key, value, category, updated_at) VALUES (?, ?, ?, NOW())
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, category = EXCLUDED.category, updated_at = NOW()`,
+        `INSERT INTO app_settings (key, value, category, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value, category = excluded.category, updated_at = CURRENT_TIMESTAMP`,
         [key, value, cat]
       );
     }
@@ -3791,7 +3920,7 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
         phone_connected as phone_number,
         status,
         qrcode,
-        NOW() as qrcode_expires_at,
+        CURRENT_TIMESTAMP as qrcode_expires_at,
         last_connection as last_activity,
         created_at
       FROM whatsapp_instances
@@ -4379,7 +4508,7 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
     try {
       // Preparar mídia (converter para Base64 se for local)
       let finalMedia = media_url;
-      if (media_url && (message_type === 'image' || message_type === 'video' || message_type === 'audio')) {
+      if (media_url && (message_type === 'image' || message_type === 'video' || message_type === 'audio' || message_type === 'audio_upload')) {
         finalMedia = await getMediaContent(media_url);
       }
 
@@ -4389,7 +4518,7 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
           caption: message,
           media: finalMedia
         });
-      } else if (message_type === 'audio' && finalMedia) {
+      } else if ((message_type === 'audio' || message_type === 'audio_upload') && finalMedia) {
         sentMessage = await evolutionAPI.sendAudio(instance.name || instance_id, {
           number: phone_number,
           audio: finalMedia
@@ -4558,6 +4687,39 @@ app.post('/api/messages/bulk-send', authenticateToken, asyncHandler(async (req, 
 
   } catch (error) {
     logger.error('Erro ao enviar mensagens em massa:', { error });
+    throw error;
+  }
+}));
+
+// Rota de Upload de Mídia (Genérica)
+app.post('/api/upload/media', authenticateToken, uploadMedia.single('file'), asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhum arquivo enviado'
+      });
+    }
+
+    const fileUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req);
+    const mimetype = req.file.mimetype;
+    let type = 'unknown';
+
+    if (mimetype.startsWith('image/')) type = 'image';
+    else if (mimetype.startsWith('video/')) type = 'video';
+    else if (mimetype.startsWith('audio/')) type = 'audio';
+
+    logger.info(`Upload de mídia realizado: ${req.file.filename} (${type})`);
+
+    res.json({
+      success: true,
+      url: fileUrl,
+      filename: req.file.filename,
+      mimetype: mimetype,
+      type: type
+    });
+  } catch (error) {
+    logger.error('Erro no upload de mídia:', { error });
     throw error;
   }
 }));
@@ -4827,7 +4989,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
           const messageResult = await dbRun(`
             INSERT INTO messages (contact_id, campaign_id, content, message_type, status, created_at)
             VALUES (?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
-          `, [contactId, campaign.id, campaign.message_template, campaign.message_type]);
+          `, [contactId, campaign.id, campaign.message || '', campaign.message_type]);
 
           // Enviar mensagem via Evolution API
           let sent = false;
@@ -5086,11 +5248,11 @@ app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, r
         c.target_segment,
         c.is_test,
         c.test_phone,
-        STRING_AGG(co.id::text, ',') as contact_ids
+        GROUP_CONCAT(co.id) as contact_ids
       FROM campaigns c
       LEFT JOIN contacts co ON (c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
       WHERE c.status = 'scheduled' 
-        AND c.scheduled_at <= NOW()
+        AND c.scheduled_at <= CURRENT_TIMESTAMP
       GROUP BY c.id
     `);
 
@@ -5122,36 +5284,43 @@ app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, r
   }
 }));
 
-// Função para criar tabelas PostgreSQL
+// Função para criar tabelas SQLite
+
+// Funcao para criar tabelas SQLite
 async function createTables(): Promise<void> {
   try {
-    const schemaPath = path.join(__dirname, '../../database/schema.sql');
+    const schemaCandidates = [
+      path.join(__dirname, '../database/schema.sql'),
+      path.join(__dirname, '../../database/schema.sql'),
+      path.join(process.cwd(), 'database/schema.sql'),
+    ];
 
-    if (fs.existsSync(schemaPath)) {
+    const schemaPath = schemaCandidates.find(p => fs.existsSync(p));
+
+    if (schemaPath) {
       const schema = fs.readFileSync(schemaPath, 'utf-8');
 
       // Executar o schema SQL
-      // Dividir por ponto-e-vírgula e executar cada comando
       const commands = schema.split(';').filter(cmd => cmd.trim().length > 0);
 
       for (const command of commands) {
         try {
           await dbRun(command.trim());
         } catch (error: any) {
-          // Ignorar erros de "já existe" mas logar outros erros
+          // Ignorar erros de "ja existe" mas logar outros erros
           if (!error.message?.includes('already exists')) {
             logger.warn('Aviso ao executar comando SQL:', { error: error.message });
           }
         }
       }
 
-      logger.info('✅ Tabelas criadas/verificadas com sucesso!');
+      logger.info('Tabelas criadas/verificadas com sucesso!');
     } else {
-      logger.warn('⚠️ Arquivo schema.sql não encontrado, criando tabelas manualmente...');
-      // Aqui você pode adicionar criação manual de tabelas se necessário
+      logger.warn('Arquivo schema.sql nao encontrado, criando tabelas manualmente...');
+      // TODO: adicionar criacao manual de tabelas se necessario
     }
   } catch (error) {
-    logger.error('❌ Erro ao criar tabelas:', { error });
+    logger.error('Erro ao criar tabelas:', { error });
     throw error;
   }
 }
@@ -5204,7 +5373,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
     // Buscar ou criar contato
     let contact = await dbGet('SELECT * FROM contacts WHERE phone = ?', [normalizedPhone]);
     if (!contact) {
-      const result = await dbRun('INSERT INTO contacts (name, phone, is_blocked, is_active) VALUES (?, ?, 0, 1)', ['Teste', normalizedPhone]);
+      const result = await dbRun('INSERT INTO contacts (name, phone, is_blocked, is_active) VALUES (?, ?, false, true)', ['Teste', normalizedPhone]);
       contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [result.lastID]);
     }
 
@@ -5227,7 +5396,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
     // Criar registro de mensagem
     await dbRun(`
       INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at, evolution_id)
-      VALUES (?, ?, ?, ?, ?, NOW(), ?)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
     `, [
       contact.id,
       'Teste de envio de imagem 🖼️',
@@ -5290,7 +5459,7 @@ initDatabase()
               c.message_type,
               c.media_url,
               c.target_segment,
-              STRING_AGG(co.id::text, ',') as contact_ids
+            GROUP_CONCAT(co.id) as contact_ids
             FROM campaigns c
             LEFT JOIN contacts co ON (
               (c.target_segment IS NULL OR c.target_segment = '') -- Se não tem segmento, pega todos (comportamento padrão?)
@@ -5298,7 +5467,7 @@ initDatabase()
               (c.target_segment IS NOT NULL AND c.target_segment != '' AND co.segment = c.target_segment) -- Se tem segmento, filtra
             )
             WHERE c.status = 'scheduled' 
-              AND c.scheduled_at <= NOW()
+              AND c.scheduled_at <= CURRENT_TIMESTAMP
             GROUP BY c.id
           `);
 
@@ -5314,7 +5483,7 @@ initDatabase()
             // Atualizar status da campanha
             await dbRun(`
               UPDATE campaigns 
-              SET status = 'running', updated_at = NOW()
+              SET status = 'running', updated_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [campaign.id]);
 
@@ -5325,7 +5494,7 @@ initDatabase()
               logger.warn(`Nenhum contato encontrado para a campanha ${campaign.name}`);
               await dbRun(`
                 UPDATE campaigns 
-                SET status = 'completed', updated_at = NOW()
+                SET status = 'completed', updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
               `, [campaign.id]);
               continue;
