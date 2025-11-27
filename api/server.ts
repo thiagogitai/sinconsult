@@ -5022,7 +5022,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
                 delay: messageDelay
               });
               sent = true;
-            } else if (campaign.message_type === 'audio') {
+            } else if (campaign.message_type === 'audio' || campaign.message_type === 'audio_upload') {
               let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
               if (audioUrl) {
                 // Converter URL local para Base64 se necessário
