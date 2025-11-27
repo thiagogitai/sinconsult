@@ -143,8 +143,8 @@ app.use(cors({
 // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
 // (Movido para depois do body-parser)
 
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
 // Implementação simples: recebe dados, retorna 200 OK, encaminha para GAS
@@ -301,7 +301,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limite
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limite
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
       file.mimetype === 'application/vnd.ms-excel') {
@@ -315,7 +315,7 @@ const upload = multer({
 // Upload para imagens (apenas imagens)
 const uploadImage = multer({
   storage: storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limite
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limite
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
@@ -328,7 +328,7 @@ const uploadImage = multer({
 // Upload para vídeos (apenas vídeos)
 const uploadVideo = multer({
   storage: storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limite
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limite
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('video/')) {
       cb(null, true);
@@ -341,7 +341,7 @@ const uploadVideo = multer({
 // Upload para mídia (imagens, vídeos e áudio)
 const uploadMedia = multer({
   storage: storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limite
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limite
   fileFilter: (req, file, cb) => {
     if (
       file.mimetype.startsWith('image/') ||
@@ -3440,6 +3440,24 @@ app.get('/api/notifications/test', authenticateToken, asyncHandler(async (req, r
       await dbRun(`
         INSERT INTO notifications (user_id, type, title, message, read, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
+      `, [notification.user_id, notification.type, notification.title, notification.message, notification.read, notification.created_at]);
+    }
+
+    res.json({
+      success: true,
+      message: 'Notificações de teste criadas com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao criar notificações de teste:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao criar notificações de teste'
+    });
+  }
+}));
+
+// Listar notificações (requer autenticação)
+app.get('/api/notifications', authenticateToken, asyncHandler(async (req, res) => {
   try {
     const userId = (req as any).user?.userId;
     const notifications = await dbAll(`
@@ -3454,7 +3472,7 @@ app.get('/api/notifications/test', authenticateToken, asyncHandler(async (req, r
       WHERE user_id = ? OR user_id IS NULL
       ORDER BY created_at DESC
       LIMIT 50
-        `, [userId]);
+    `, [userId]);
 
     const unreadCount = notifications.filter((n: any) => !n.read).length;
 
@@ -3522,7 +3540,7 @@ app.get('/api/users', authenticateToken, requireAdmin, asyncHandler(async (req, 
         created_at
       FROM users
       ORDER BY created_at DESC
-        `);
+    `);
 
     res.json(users.map((u: any) => ({
       ...u,
@@ -3672,7 +3690,7 @@ app.put('/api/users/:id', authenticateToken, requireAdmin, asyncHandler(async (r
 
     values.push(id);
     await dbRun(
-      `UPDATE users SET ${ updates.join(', ') } WHERE id = ? `,
+      `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
       values
     );
 
@@ -3764,8 +3782,8 @@ app.post('/api/settings', authenticateToken, asyncHandler(async (req, res) => {
       const value = String(val);
       const cat = (key === 'evolutionApiUrl' || key === 'evolutionApiKey') ? 'api' : category;
       await dbRun(
-        `INSERT INTO app_settings(key, value, category, updated_at) VALUES(?, ?, ?, CURRENT_TIMESTAMP)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, category = excluded.category, updated_at = CURRENT_TIMESTAMP`,
+        `INSERT INTO app_settings (key, value, category, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value, category = excluded.category, updated_at = CURRENT_TIMESTAMP`,
         [key, value, cat]
       );
     }
@@ -3796,7 +3814,7 @@ app.get('/api/campaigns/recent', authenticateToken, asyncHandler(async (req, res
       FROM campaigns
       ORDER BY created_at DESC
       LIMIT 5
-        `);
+    `);
 
     res.json({ campaigns });
   } catch (error) {
@@ -3908,11 +3926,11 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
         last_connection as last_activity,
         created_at
       FROM whatsapp_instances
-      WHERE(is_active = true OR is_active IS NULL)
+      WHERE (is_active = true OR is_active IS NULL)
       ORDER BY created_at DESC
-        `);
+    `);
 
-    logger.info(`Total de instâncias encontradas: ${ instances.length }`, {
+    logger.info(`Total de instâncias encontradas: ${instances.length}`, {
       instances: instances.map((i: any) => ({ id: i.id, name: i.instance_name, status: i.status, is_active: i.is_active }))
     });
 
@@ -3921,7 +3939,7 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
       if ((instance.status === 'connecting' || instance.status === 'created') && (instance.instance_id || instance.instance_name)) {
         try {
           const instanceName = instance.instance_id || instance.instance_name;
-          logger.info(`Verificando status da instância ${ instanceName } na Evolution API(status atual: ${ instance.status })...`);
+          logger.info(`Verificando status da instância ${instanceName} na Evolution API (status atual: ${instance.status})...`);
 
           const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instanceName);
 
@@ -3934,7 +3952,7 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
           const connectionState = instanceData.connectionState || (evolutionStatus as any).connectionState || state;
           const connectionStateStr = String(connectionState).toLowerCase();
 
-          logger.info(`Status retornado pela Evolution API para ${ instanceName }: `, {
+          logger.info(`Status retornado pela Evolution API para ${instanceName}:`, {
             state,
             stateStr,
             connectionState,
@@ -3968,9 +3986,9 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
               UPDATE whatsapp_instances 
               SET status = ?, phone_connected = ?, updated_at = CURRENT_TIMESTAMP
               WHERE id = ?
-        `, [mappedStatus, phoneConnected, instance.id]);
+            `, [mappedStatus, phoneConnected, instance.id]);
 
-            logger.info(`Status da instância ${ instanceName } atualizado: ${ instance.status } -> ${ mappedStatus }`);
+            logger.info(`Status da instância ${instanceName} atualizado: ${instance.status} -> ${mappedStatus}`);
 
             // Atualizar na lista de retorno
             instance.status = mappedStatus;
@@ -4012,7 +4030,7 @@ app.get('/api/whatsapp/health', authenticateToken, asyncHandler(async (req, res)
     logger.error('Erro ao verificar Evolution API:', { error });
     res.status(500).json({
       isHealthy: false,
-      message: `Erro ao verificar Evolution API: ${ error.message }`,
+      message: `Erro ao verificar Evolution API: ${error.message}`,
       details: { error: error.message }
     });
   }
@@ -4171,9 +4189,9 @@ app.post('/api/whatsapp/instances',
 
       // Salvar no banco de dados local
       const result = await dbRun(`
-      INSERT INTO whatsapp_instances(name, instance_id, phone_connected, status, qrcode, is_active)
-      VALUES(?, ?, ?, ?, ?, true)
-          `, [instanceName, instanceId, phoneNumber || null, status, qrcode || null]);
+      INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, qrcode, is_active)
+      VALUES (?, ?, ?, ?, ?, true)
+    `, [instanceName, instanceId, phoneNumber || null, status, qrcode || null]);
 
       const newInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [result.lastID]);
 
@@ -4186,7 +4204,7 @@ app.post('/api/whatsapp/instances',
       res.json({
         ...newInstance,
         qrcode: qrcode,
-        qrcode_url: qrcode ? `data: image / png; base64, ${ qrcode } ` : null
+        qrcode_url: qrcode ? `data:image/png;base64,${qrcode}` : null
       });
     } catch (error: any) {
       logger.error('Erro ao criar instância WhatsApp:', { error: error.message, stack: error.stack });
@@ -4209,7 +4227,7 @@ app.patch('/api/whatsapp/instances/:id/status', authenticateToken, asyncHandler(
       UPDATE whatsapp_instances 
       SET status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-        `, [status, id]);
+    `, [status, id]);
 
     const updatedInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [id]);
     res.json(updatedInstance);
@@ -4245,7 +4263,7 @@ app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(
       UPDATE whatsapp_instances 
       SET status = ?, qrcode = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-        `, ['connecting', base64Content, id]);
+    `, ['connecting', base64Content, id]);
 
     // Criar notificação de conexão iniciada
     const userId = (req as any).user?.userId;
@@ -4253,12 +4271,12 @@ app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(
       userId,
       'info',
       'WhatsApp conectando',
-      `Instância "${instance.name}" está conectando...Escaneie o QR Code`
+      `Instância "${instance.name}" está conectando... Escaneie o QR Code`
     );
 
     res.json({
       qrcode: base64Content,
-      qrcode_url: base64 || (base64Content ? `data: image / png; base64, ${ base64Content } ` : null),
+      qrcode_url: base64 || (base64Content ? `data:image/png;base64,${base64Content}` : null),
       code,
       status: 'connecting'
     });
@@ -4287,7 +4305,7 @@ app.post('/api/whatsapp/instances/:id/disconnect', authenticateToken, asyncHandl
       UPDATE whatsapp_instances 
       SET status = ?, phone_connected = NULL, qrcode = NULL, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-  `, ['disconnected', id]);
+    `, ['disconnected', id]);
 
     res.json({ message: 'Instância desconectada com sucesso' });
   } catch (error) {
@@ -4371,9 +4389,9 @@ app.get('/api/whatsapp/instances/:id/status', authenticateToken, asyncHandler(as
           UPDATE whatsapp_instances 
           SET status = ?, phone_connected = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
-  `, [mappedStatus, phoneConnected, id]);
+        `, [mappedStatus, phoneConnected, id]);
 
-        logger.info(`Status da instância ${ instance.name } atualizado: ${ instance.status } -> ${ mappedStatus } (Evolution state: ${ stateStr })`);
+        logger.info(`Status da instância ${instance.name} atualizado: ${instance.status} -> ${mappedStatus} (Evolution state: ${stateStr})`);
 
         // Buscar instância atualizada
         const updatedInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [id]);
@@ -4417,9 +4435,9 @@ app.post('/api/whatsapp/instances-direct',
 
       // Criar diretamente no banco de dados
       const result = await dbRun(`
-        INSERT INTO whatsapp_instances(name, instance_id, phone_connected, status, qrcode)
-VALUES(?, ?, ?, ?, ?)
-  `, [name, instance_id || name, phone_connected || null, status || 'created', qrcode || null]);
+        INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, qrcode)
+        VALUES (?, ?, ?, ?, ?)
+      `, [name, instance_id || name, phone_connected || null, status || 'created', qrcode || null]);
 
       const newInstance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [result.lastID]);
 
@@ -4481,9 +4499,9 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
 
     // Criar registro de mensagem
     const messageResult = await dbRun(`
-      INSERT INTO messages(contact_id, content, message_type, media_url, status)
-VALUES(?, ?, ?, ?, ?)
-  `, [contact.id, message, message_type || 'text', media_url || null, 'pending']);
+      INSERT INTO messages (contact_id, content, message_type, media_url, status)
+      VALUES (?, ?, ?, ?, ?)
+    `, [contact.id, message, message_type || 'text', media_url || null, 'pending']);
 
     const messageRecord = await dbGet('SELECT * FROM messages WHERE id = ?', [messageResult.lastID]);
 
@@ -4525,7 +4543,7 @@ VALUES(?, ?, ?, ?, ?)
         UPDATE messages 
         SET status = ?, sent_at = ?, error_message = NULL
         WHERE id = ?
-  `, ['sent', new Date().toISOString(), messageRecord.id]);
+      `, ['sent', new Date().toISOString(), messageRecord.id]);
 
       res.json({
         success: true,
@@ -4539,8 +4557,8 @@ VALUES(?, ?, ?, ?, ?)
       await dbRun(`
         UPDATE messages 
         SET status = ?, error_message = ?
-  WHERE id = ?
-    `, ['failed', sendError.message, messageRecord.id]);
+        WHERE id = ?
+      `, ['failed', sendError.message, messageRecord.id]);
 
       res.status(500).json({
         success: false,
@@ -4588,9 +4606,9 @@ app.post('/api/messages/bulk-send', authenticateToken, asyncHandler(async (req, 
 
         // Criar registro de mensagem
         const messageResult = await dbRun(`
-          INSERT INTO messages(contact_id, campaign_id, content, message_type, media_url, status)
-VALUES(?, ?, ?, ?, ?, ?)
-  `, [contact_id, campaign_id || null, message, message_type || 'text', media_url || null, 'pending']);
+          INSERT INTO messages (contact_id, campaign_id, content, message_type, media_url, status)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [contact_id, campaign_id || null, message, message_type || 'text', media_url || null, 'pending']);
 
         // Delay anti-bloqueio (1-3 segundos entre mensagens)
         await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
@@ -4633,7 +4651,7 @@ VALUES(?, ?, ?, ?, ?, ?)
             UPDATE messages 
             SET status = ?, sent_at = ?, error_message = NULL
             WHERE id = ?
-  `, ['sent', new Date().toISOString(), messageResult.lastID]);
+          `, ['sent', new Date().toISOString(), messageResult.lastID]);
 
           results.push({
             contact_id,
@@ -4647,8 +4665,8 @@ VALUES(?, ?, ?, ?, ?, ?)
           await dbRun(`
             UPDATE messages 
             SET status = ?, error_message = ?
-  WHERE id = ?
-    `, ['failed', sendError.message, messageResult.lastID]);
+            WHERE id = ?
+          `, ['failed', sendError.message, messageResult.lastID]);
 
           errors.push({
             contact_id,
@@ -4685,7 +4703,7 @@ app.post('/api/upload/media', authenticateToken, uploadMedia.single('file'), asy
       });
     }
 
-    const fileUrl = buildAbsoluteUrl(`/ uploads / ${ req.file.filename } `, req);
+    const fileUrl = buildAbsoluteUrl(`/uploads/${req.file.filename}`, req);
     const mimetype = req.file.mimetype;
     let type = 'unknown';
 
@@ -4693,7 +4711,7 @@ app.post('/api/upload/media', authenticateToken, uploadMedia.single('file'), asy
     else if (mimetype.startsWith('video/')) type = 'video';
     else if (mimetype.startsWith('audio/')) type = 'audio';
 
-    logger.info(`Upload de mídia realizado: ${ req.file.filename } (${ type })`);
+    logger.info(`Upload de mídia realizado: ${req.file.filename} (${type})`);
 
     res.json({
       success: true,
@@ -4756,9 +4774,9 @@ class MessageQueue {
 
     // Criar registro de mensagem
     const messageResult = await dbRun(`
-      INSERT INTO messages(contact_id, campaign_id, content, message_type, media_url, status)
-VALUES(?, ?, ?, ?, ?, ?)
-  `, [contact_id, campaign_id || null, content, message_type || 'text', media_url || null, 'pending']);
+      INSERT INTO messages (contact_id, campaign_id, content, message_type, media_url, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [contact_id, campaign_id || null, content, message_type || 'text', media_url || null, 'pending']);
 
     try {
       // Preparar mídia (converter para Base64 se for local)
@@ -4798,19 +4816,19 @@ VALUES(?, ?, ?, ?, ?, ?)
         UPDATE messages 
         SET status = ?, sent_at = ?, error_message = NULL
         WHERE id = ?
-  `, ['sent', new Date().toISOString(), messageResult.lastID]);
+      `, ['sent', new Date().toISOString(), messageResult.lastID]);
 
-      logger.info(`✅ Mensagem enviada para ${ contact.phone } `);
+      logger.info(`✅ Mensagem enviada para ${contact.phone}`);
 
     } catch (sendError: any) {
       // Atualizar status da mensagem com erro
       await dbRun(`
         UPDATE messages 
         SET status = ?, error_message = ?
-  WHERE id = ?
-    `, ['failed', sendError.message, messageResult.lastID]);
+        WHERE id = ?
+      `, ['failed', sendError.message, messageResult.lastID]);
 
-      logger.error(`Erro ao enviar para ${ contact.phone }: `, { error: sendError.message });
+      logger.error(`Erro ao enviar para ${contact.phone}:`, { error: sendError.message });
       throw sendError;
     }
   }
@@ -4819,7 +4837,7 @@ VALUES(?, ?, ?, ?, ?, ?)
 // Função auxiliar para obter conteúdo da mídia (URL ou Base64)
 async function getMediaContent(url: string): Promise<string> {
   try {
-    logger.info(`[getMediaContent] Processando URL: ${ url } `);
+    logger.info(`[getMediaContent] Processando URL: ${url}`);
 
     if (!url) {
       logger.warn('[getMediaContent] URL vazia');
@@ -4827,9 +4845,11 @@ async function getMediaContent(url: string): Promise<string> {
     }
 
     // Se for URL remota (http/https) e não for localhost/127.0.0.1, retorna a URL
-    // A Evolution API externa consegue baixar diretamente de URLs públicas (mesmo do nosso domínio)
-    if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
-      logger.info('[getMediaContent] URL remota/pública detectada, retornando original');
+    // Mas verificar se contém /uploads/ ou /api/uploads/ - se sim, é local mesmo sendo URL completa
+    const isLocalUpload = url.includes('/uploads/') || url.includes('/api/uploads/');
+
+    if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1') && !isLocalUpload) {
+      logger.info('[getMediaContent] URL remota detectada, retornando original');
       return url;
     }
 
@@ -4862,14 +4882,14 @@ async function getMediaContent(url: string): Promise<string> {
       filePath = path.join(process.cwd(), 'uploads', filePath);
     }
 
-    logger.info(`[getMediaContent] Caminho resolvido: ${ filePath } `);
+    logger.info(`[getMediaContent] Caminho resolvido: ${filePath}`);
 
     // Verificar se arquivo existe
     if (!fs.existsSync(filePath)) {
-      logger.error(`[getMediaContent] Arquivo não encontrado: ${ filePath } `);
+      logger.error(`[getMediaContent] Arquivo não encontrado: ${filePath}`);
       // Tentar caminho alternativo (raiz do projeto/uploads)
       const altPath = path.join(__dirname, '../../uploads', path.basename(filePath));
-      logger.info(`[getMediaContent] Tentando caminho alternativo: ${ altPath } `);
+      logger.info(`[getMediaContent] Tentando caminho alternativo: ${altPath}`);
 
       if (fs.existsSync(altPath)) {
         filePath = altPath;
@@ -4890,9 +4910,9 @@ async function getMediaContent(url: string): Promise<string> {
     const base64 = fileBuffer.toString('base64');
     const mimeType = getMimeType(filePath);
 
-    logger.info(`[getMediaContent] Arquivo lido com sucesso.Tamanho: ${ fileBuffer.length } bytes.Mime: ${ mimeType } `);
+    logger.info(`[getMediaContent] Arquivo lido com sucesso. Tamanho: ${fileBuffer.length} bytes. Mime: ${mimeType}`);
 
-    return `data:${ mimeType }; base64, ${ base64 } `;
+    return `data:${mimeType};base64,${base64}`;
   } catch (error: any) {
     logger.error('[getMediaContent] Erro ao processar mídia:', { error: error.message, stack: error.stack });
     return url; // Retorna URL original em caso de erro
@@ -4922,11 +4942,11 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
   try {
     // Obter instância ativa
     const instance = await dbGet(`
-SELECT * FROM whatsapp_instances 
-      WHERE status IN('connected', 'open') AND(is_active = true OR is_active IS NULL)
+      SELECT * FROM whatsapp_instances 
+      WHERE status IN ('connected','open') AND (is_active = true OR is_active IS NULL)
       ORDER BY last_connection DESC 
       LIMIT 1
-  `);
+    `);
 
     if (!instance) {
       logger.error('Nenhuma instância WhatsApp conectada disponível');
@@ -4934,11 +4954,11 @@ SELECT * FROM whatsapp_instances
         UPDATE campaigns 
         SET status = 'failed', updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-  `, [campaign.id]);
+      `, [campaign.id]);
       return;
     }
 
-    logger.info(`Usando instância: ${ instance.name || instance.instance_id } (${ instance.phone_connected })`);
+    logger.info(`Usando instância: ${instance.name || instance.instance_id} (${instance.phone_connected})`);
 
     // Processar em lotes para evitar bloqueio
     const batchSize = 10; // Enviar de 10 em 10 contatos
@@ -4947,11 +4967,11 @@ SELECT * FROM whatsapp_instances
 
     for (let i = 0; i < contactIds.length; i += batchSize) {
       const batch = contactIds.slice(i, i + batchSize);
-      logger.info(`Processando lote ${ Math.floor(i / batchSize) + 1 } de ${ Math.ceil(contactIds.length / batchSize) } `);
+      logger.info(`Processando lote ${Math.floor(i / batchSize) + 1} de ${Math.ceil(contactIds.length / batchSize)}`);
 
       // Aguardar entre lotes (exceto o primeiro)
       if (i > 0) {
-        logger.debug(`Aguardando ${ batchDelay / 1000 } segundos antes do próximo lote...`);
+        logger.debug(`Aguardando ${batchDelay / 1000} segundos antes do próximo lote...`);
         await new Promise(resolve => setTimeout(resolve, batchDelay));
       }
 
@@ -4961,17 +4981,17 @@ SELECT * FROM whatsapp_instances
           // Obter detalhes do contato
           const contact = await dbGet('SELECT * FROM contacts WHERE id = ? AND (is_blocked = false OR is_blocked IS NULL) AND is_active = true', [contactId]);
           if (!contact) {
-            logger.warn(`Contato ${ contactId } não encontrado ou está bloqueado`);
+            logger.warn(`Contato ${contactId} não encontrado ou está bloqueado`);
             continue;
           }
 
-          logger.info(`Enviando mensagem para ${ contact.phone } (${ contact.name })`);
+          logger.info(`Enviando mensagem para ${contact.phone} (${contact.name})`);
 
           // Criar mensagem no banco de dados
           const messageResult = await dbRun(`
-            INSERT INTO messages(contact_id, campaign_id, content, message_type, status, created_at)
-VALUES(?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
-  `, [contactId, campaign.id, campaign.message || '', campaign.message_type]);
+            INSERT INTO messages (contact_id, campaign_id, content, message_type, status, created_at)
+            VALUES (?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
+          `, [contactId, campaign.id, campaign.message || '', campaign.message_type]);
 
           // Enviar mensagem via Evolution API
           let sent = false;
@@ -5006,8 +5026,8 @@ VALUES(?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
                 delay: messageDelay
               });
               sent = true;
-            } else if (campaign.message_type === 'audio' || campaign.message_type === 'audio_upload') {
-              let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/ uploads / tts / ${ campaign.tts_audio_file } ` : null);
+            } else if (campaign.message_type === 'audio') {
+              let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
               if (audioUrl) {
                 // Converter URL local para Base64 se necessário
                 const audioContent = await getMediaContent(audioUrl);
@@ -5022,7 +5042,7 @@ VALUES(?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
             }
 
             if (sent) {
-              logger.info(`Mensagem enviada para ${ contact.phone } `);
+              logger.info(`Mensagem enviada para ${contact.phone}`);
 
               // Atualizar status da mensagem
               const evoId = resp?.key?.id || null;
@@ -5030,19 +5050,19 @@ VALUES(?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
                 UPDATE messages 
                 SET status = 'sent', sent_at = CURRENT_TIMESTAMP, error_message = NULL, evolution_id = COALESCE(?, evolution_id)
                 WHERE id = ?
-  `, [evoId, messageResult.lastID]);
+              `, [evoId, messageResult.lastID]);
             }
 
           } catch (sendError) {
             errorMessage = sendError.message;
-            logger.error(`Erro ao enviar para ${ contact.phone }: `, { error: errorMessage });
+            logger.error(`Erro ao enviar para ${contact.phone}:`, { error: errorMessage });
 
             // Atualizar status da mensagem com erro
             await dbRun(`
               UPDATE messages 
               SET status = 'failed', error_message = ?
-  WHERE id = ?
-    `, [errorMessage, messageResult.lastID]);
+              WHERE id = ?
+            `, [errorMessage, messageResult.lastID]);
           }
 
           // Aguardar entre mensagens para evitar bloqueio
@@ -5051,7 +5071,7 @@ VALUES(?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
           }
 
         } catch (contactError: any) {
-          logger.error(`Erro ao processar contato ${ contactId }: `, { error: contactError.message });
+          logger.error(`Erro ao processar contato ${contactId}:`, { error: contactError.message });
         }
       }
     }
@@ -5061,19 +5081,19 @@ VALUES(?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
       UPDATE campaigns 
       SET status = 'completed', updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-  `, [campaign.id]);
+    `, [campaign.id]);
 
-    logger.info(`Campanha ${ campaign.name } concluída com sucesso!`);
+    logger.info(`Campanha ${campaign.name} concluída com sucesso!`);
 
   } catch (error) {
-    logger.error(`Erro ao processar campanha ${ campaign.name }: `, { error: error.message });
+    logger.error(`Erro ao processar campanha ${campaign.name}:`, { error: error.message });
 
     // Marcar campanha como falhada
     await dbRun(`
       UPDATE campaigns 
       SET status = 'failed', updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-  `, [campaign.id]);
+    `, [campaign.id]);
   }
 }
 
@@ -5084,7 +5104,7 @@ app.post('/api/webhooks/evolution', asyncHandler(async (req, res) => {
   try {
     const { event, data } = req.body;
 
-    logger.info(`Webhook recebido: ${ event } `, { data });
+    logger.info(`Webhook recebido: ${event}`, { data });
 
     // Processar diferentes tipos de eventos
     if (event === 'messages.upsert') {
@@ -5096,15 +5116,15 @@ app.post('/api/webhooks/evolution', asyncHandler(async (req, res) => {
         if (status) {
           // Atualizar status da mensagem no banco usando evolution_id
           if (status === 'sent') {
-            await dbRun(`UPDATE messages SET status = 'sent', sent_at = CURRENT_TIMESTAMP WHERE evolution_id = ? `, [messageId]);
+            await dbRun(`UPDATE messages SET status='sent', sent_at=CURRENT_TIMESTAMP WHERE evolution_id = ?`, [messageId]);
           } else if (status === 'delivered') {
-            await dbRun(`UPDATE messages SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE evolution_id = ? `, [messageId]);
+            await dbRun(`UPDATE messages SET status='delivered', delivered_at=CURRENT_TIMESTAMP WHERE evolution_id = ?`, [messageId]);
           } else if (status === 'read') {
-            await dbRun(`UPDATE messages SET status = 'read', read_at = CURRENT_TIMESTAMP WHERE evolution_id = ? `, [messageId]);
+            await dbRun(`UPDATE messages SET status='read', read_at=CURRENT_TIMESTAMP WHERE evolution_id = ?`, [messageId]);
           } else if (status === 'played') {
-            await dbRun(`UPDATE messages SET status = 'read', read_at = CURRENT_TIMESTAMP WHERE evolution_id = ? `, [messageId]);
+            await dbRun(`UPDATE messages SET status='read', read_at=CURRENT_TIMESTAMP WHERE evolution_id = ?`, [messageId]);
           }
-          logger.info(`Status da mensagem ${ messageId } atualizado para: ${ status } `);
+          logger.info(`Status da mensagem ${messageId} atualizado para: ${status}`);
         }
       }
     } else if (event === 'connection.update') {
@@ -5114,9 +5134,9 @@ app.post('/api/webhooks/evolution', asyncHandler(async (req, res) => {
           UPDATE whatsapp_instances 
           SET status = ?, updated_at = CURRENT_TIMESTAMP
           WHERE instance_id = ?
-  `, [data.state, data.instance]);
+        `, [data.state, data.instance]);
 
-        logger.info(`Status da instância ${ data.instance }: ${ data.state } `);
+        logger.info(`Status da instância ${data.instance}: ${data.state}`);
       }
     } else if (event === 'qrcode.updated') {
       // QR Code atualizado
@@ -5125,9 +5145,9 @@ app.post('/api/webhooks/evolution', asyncHandler(async (req, res) => {
           UPDATE whatsapp_instances 
           SET qrcode = ?, updated_at = CURRENT_TIMESTAMP
           WHERE instance_id = ?
-  `, [data.qrcode, data.instance]);
+        `, [data.qrcode, data.instance]);
 
-        logger.info(`QR Code atualizado para instância ${ data.instance } `);
+        logger.info(`QR Code atualizado para instância ${data.instance}`);
       }
     }
 
@@ -5220,19 +5240,19 @@ app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, r
   try {
     await loadEvolutionConfigFromDB();
     const campaigns: any[] = await dbAll(`
-SELECT
-c.id,
-  c.name,
-  c.status,
-  c.message as message_template,
-  c.message_type,
-  c.media_url,
-  c.target_segment,
-  c.is_test,
-  c.test_phone,
-  GROUP_CONCAT(co.id) as contact_ids
+      SELECT 
+        c.id,
+        c.name,
+        c.status,
+        c.message as message_template,
+        c.message_type,
+        c.media_url,
+        c.target_segment,
+        c.is_test,
+        c.test_phone,
+        GROUP_CONCAT(co.id) as contact_ids
       FROM campaigns c
-      LEFT JOIN contacts co ON(c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
+      LEFT JOIN contacts co ON (c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
       WHERE c.status = 'scheduled' 
         AND c.scheduled_at <= CURRENT_TIMESTAMP
       GROUP BY c.id
@@ -5240,7 +5260,7 @@ c.id,
 
     const results: any[] = [];
     for (const campaign of campaigns) {
-      await dbRun(`UPDATE campaigns SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE id = ? `, [campaign.id]);
+      await dbRun(`UPDATE campaigns SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [campaign.id]);
       let contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
       if (campaign.is_test) {
         if (campaign.test_phone && String(campaign.test_phone).trim() !== '') {
@@ -5316,10 +5336,10 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
     // Buscar instância conectada
     const instance = await dbGet(`
       SELECT * FROM whatsapp_instances 
-      WHERE status IN('connected', 'open') AND(is_active = true OR is_active IS NULL)
+      WHERE status IN ('connected','open') AND (is_active = true OR is_active IS NULL)
       ORDER BY last_connection DESC 
       LIMIT 1
-  `);
+    `);
 
     if (!instance) {
       return res.status(400).json({
@@ -5336,8 +5356,8 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
         const files = fs.readdirSync(uploadsDir);
         const imageFiles = files.filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
         if (imageFiles.length > 0) {
-          finalMediaUrl = `/ api / uploads / ${ imageFiles[0] } `;
-          logger.info(`Usando imagem encontrada: ${ imageFiles[0] } `);
+          finalMediaUrl = `/api/uploads/${imageFiles[0]}`;
+          logger.info(`Usando imagem encontrada: ${imageFiles[0]}`);
         }
       }
     }
@@ -5362,7 +5382,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
     // Preparar mídia (converter para Base64 se necessário)
     const finalMedia = await getMediaContent(finalMediaUrl);
 
-    logger.info(`Enviando imagem de teste para ${ testPhone } `, {
+    logger.info(`Enviando imagem de teste para ${testPhone}`, {
       instance: instance.name || instance.instance_id,
       mediaUrl: finalMediaUrl,
       mediaType: finalMedia.startsWith('data:') ? 'base64' : 'url'
@@ -5377,8 +5397,8 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
 
     // Criar registro de mensagem
     await dbRun(`
-      INSERT INTO messages(contact_id, content, message_type, media_url, status, sent_at, evolution_id)
-VALUES(?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+      INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at, evolution_id)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
     `, [
       contact.id,
       'Teste de envio de imagem 🖼️',
@@ -5421,19 +5441,19 @@ initDatabase()
 
     // Iniciar servidor
     app.listen(PORT, () => {
-      logger.info(`Servidor rodando na porta ${ PORT } `);
+      logger.info(`Servidor rodando na porta ${PORT}`);
       logger.info(`Dashboard: http://localhost:${PORT}`);
-logger.info(`API: http://localhost:${PORT}/api`);
+      logger.info(`API: http://localhost:${PORT}/api`);
 
-// Iniciar cron jobs após o servidor estar rodando
-logger.info('Iniciando agendador de campanhas...');
+      // Iniciar cron jobs após o servidor estar rodando
+      logger.info('Iniciando agendador de campanhas...');
 
-// Agendar campanhas (executa a cada minuto)
-cron.schedule('* * * * *', async () => {
-  try {
-    logger.debug('Verificando campanhas agendadas...');
+      // Agendar campanhas (executa a cada minuto)
+      cron.schedule('* * * * *', async () => {
+        try {
+          logger.debug('Verificando campanhas agendadas...');
 
-    const campaigns = await dbAll(`
+          const campaigns = await dbAll(`
             SELECT 
               c.id,
               c.name,
@@ -5453,51 +5473,51 @@ cron.schedule('* * * * *', async () => {
             GROUP BY c.id
           `);
 
-    for (const campaign of campaigns) {
-      logger.info(`Processando campanha: ${campaign.name} (ID: ${campaign.id})`);
-      logger.info(`Segmento alvo: "${campaign.target_segment}"`);
+          for (const campaign of campaigns) {
+            logger.info(`Processando campanha: ${campaign.name} (ID: ${campaign.id})`);
+            logger.info(`Segmento alvo: "${campaign.target_segment}"`);
 
-      // Se o usuário definiu um segmento mas não encontrou contatos, pode ser que o JOIN falhou ou não há contatos nesse segmento
-      if (campaign.target_segment && (!campaign.contact_ids || campaign.contact_ids.length === 0)) {
-        logger.warn(`Campanha ${campaign.name} tem segmento "${campaign.target_segment}" mas nenhum contato foi encontrado.`);
-      }
+            // Se o usuário definiu um segmento mas não encontrou contatos, pode ser que o JOIN falhou ou não há contatos nesse segmento
+            if (campaign.target_segment && (!campaign.contact_ids || campaign.contact_ids.length === 0)) {
+              logger.warn(`Campanha ${campaign.name} tem segmento "${campaign.target_segment}" mas nenhum contato foi encontrado.`);
+            }
 
-      // Atualizar status da campanha
-      await dbRun(`
+            // Atualizar status da campanha
+            await dbRun(`
               UPDATE campaigns 
               SET status = 'running', updated_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [campaign.id]);
 
-      // Obter contatos da campanha
-      const contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
+            // Obter contatos da campanha
+            const contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
 
-      if (contactIds.length === 0) {
-        logger.warn(`Nenhum contato encontrado para a campanha ${campaign.name}`);
-        await dbRun(`
+            if (contactIds.length === 0) {
+              logger.warn(`Nenhum contato encontrado para a campanha ${campaign.name}`);
+              await dbRun(`
                 UPDATE campaigns 
                 SET status = 'completed', updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
               `, [campaign.id]);
-        continue;
-      }
+              continue;
+            }
 
-      logger.info(`Encontrados ${contactIds.length} contatos para a campanha ${campaign.name}`);
+            logger.info(`Encontrados ${contactIds.length} contatos para a campanha ${campaign.name}`);
 
-      // Processar campanha com sistema de fila anti-bloqueio
-      await processCampaignWithQueue(campaign, contactIds);
-    }
+            // Processar campanha com sistema de fila anti-bloqueio
+            await processCampaignWithQueue(campaign, contactIds);
+          }
 
-  } catch (error) {
-    logger.error('Erro no agendamento:', { error });
-  }
-});
+        } catch (error) {
+          logger.error('Erro no agendamento:', { error });
+        }
+      });
     });
 
     // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
     // (Movido para o início do arquivo, antes do body-parser)
   })
-  .catch (error => {
-  logger.error('Erro ao inicializar banco de dados:', { error });
-  process.exit(1);
-});
+  .catch(error => {
+    logger.error('Erro ao inicializar banco de dados:', { error });
+    process.exit(1);
+  });
