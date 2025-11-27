@@ -267,6 +267,16 @@ app.use('/uploads', express.static(uploadsPath));
 app.use('/api/uploads', express.static(uploadsPath));
 logger.info('✅ Servindo arquivos de upload de:', uploadsPath);
 
+// Servir arquivos da pasta public (logo, favicon, etc)
+const publicPath = path.join(projectRoot, 'public');
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+  logger.info('✅ Servindo arquivos públicos de:', publicPath);
+} else {
+  logger.warn('⚠️  Pasta public/ não encontrada em:', publicPath);
+}
+
+
 // Rate limiting global
 app.use(defaultRateLimiter);
 
