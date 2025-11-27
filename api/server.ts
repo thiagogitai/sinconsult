@@ -4843,11 +4843,9 @@ async function getMediaContent(url: string): Promise<string> {
     }
 
     // Se for URL remota (http/https) e não for localhost/127.0.0.1, retorna a URL
-    // Mas verificar se contém /uploads/ ou /api/uploads/ - se sim, é local mesmo sendo URL completa
-    const isLocalUpload = url.includes('/uploads/') || url.includes('/api/uploads/');
-
-    if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1') && !isLocalUpload) {
-      logger.info('[getMediaContent] URL remota detectada, retornando original');
+    // A Evolution API externa consegue baixar diretamente de URLs públicas (mesmo do nosso domínio)
+    if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
+      logger.info('[getMediaContent] URL remota/pública detectada, retornando original');
       return url;
     }
 
