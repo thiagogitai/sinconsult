@@ -58,6 +58,14 @@ const SettingsPage: React.FC = () => {
     from_email: ''
   });
 
+  const [profileSettings, setProfileSettings] = useState({
+    name: '',
+    email: '',
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+
   useEffect(() => {
     fetchSettings();
   }, [activeTab]);
@@ -121,6 +129,16 @@ const SettingsPage: React.FC = () => {
                 from_email: first.from_email || ''
               }));
             }
+          }
+        } else if (activeTab === 'profile') {
+          const userStr = localStorage.getItem('user');
+          if (userStr) {
+            const user = JSON.parse(userStr);
+            setProfileSettings(prev => ({
+              ...prev,
+              name: user.name || '',
+              email: user.email || ''
+            }));
           }
         }
       }
@@ -195,6 +213,48 @@ const SettingsPage: React.FC = () => {
         }
         setSaving(false);
         return;
+      } else if (activeTab === 'profile') {
+        if (profileSettings.newPassword && profileSettings.newPassword !== profileSettings.confirmPassword) {
+          toast({ title: 'Erro', description: 'As senhas não conferem', variant: 'destructive' });
+          setSaving(false);
+          return;
+        }
+
+        const response = await fetch(`${apiBase}/auth/profile`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: profileSettings.name,
+            email: profileSettings.email,
+            currentPassword: profileSettings.currentPassword,
+            newPassword: profileSettings.newPassword
+          })
+        });
+
+        if (response.ok) {
+          toast({ title: 'Sucesso', description: 'Perfil atualizado com sucesso!' });
+          const userStr = localStorage.getItem('user');
+          if (userStr) {
+            const user = JSON.parse(userStr);
+            user.name = profileSettings.name;
+            user.email = profileSettings.email;
+            localStorage.setItem('user', JSON.stringify(user));
+          }
+          setProfileSettings(prev => ({
+            ...prev,
+            currentPassword: '',
+            newPassword: '',
+            confirmPassword: ''
+          }));
+        } else {
+          const data = await response.json();
+          toast({ title: 'Erro', description: data.message || 'Erro ao atualizar perfil', variant: 'destructive' });
+        }
+        setSaving(false);
+        return;
       }
 
       const response = await fetch(`${apiBase}/settings`, {
@@ -227,7 +287,8 @@ const SettingsPage: React.FC = () => {
     { id: 'api', name: 'API Keys', icon: Key },
     { id: 'sms', name: 'SMS', icon: MessageSquare },
     { id: 'email', name: 'Email', icon: Mail },
-    { id: 'database', name: 'Banco de Dados', icon: Database }
+    { id: 'database', name: 'Banco de Dados', icon: Database },
+    { id: 'profile', name: 'Meu Perfil', icon: User }
   ];
 
   if (loading) {
@@ -263,8 +324,8 @@ const SettingsPage: React.FC = () => {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${activeTab === tab.id
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-green-500 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -710,6 +771,68 @@ const SettingsPage: React.FC = () => {
                 <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
                   Limpar Cache
                 </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'profile' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Meu Perfil</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nome</label>
+                    <input
+                      type="text"
+                      value={profileSettings.name}
+                      onChange={(e) => setProfileSettings({ ...profileSettings, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={profileSettings.email}
+                      onChange={(e) => setProfileSettings({ ...profileSettings, email: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Alterar Senha</h3>
+                <div className="space-y-4 max-w-md">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Senha Atual</label>
+                    <input
+                      type="password"
+                      value={profileSettings.currentPassword}
+                      onChange={(e) => setProfileSettings({ ...profileSettings, currentPassword: e.target.value })}
+                      placeholder="Necessário para alterar a senha"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nova Senha</label>
+                    <input
+                      type="password"
+                      value={profileSettings.newPassword}
+                      onChange={(e) => setProfileSettings({ ...profileSettings, newPassword: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Confirmar Nova Senha</label>
+                    <input
+                      type="password"
+                      value={profileSettings.confirmPassword}
+                      onChange={(e) => setProfileSettings({ ...profileSettings, confirmPassword: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}
