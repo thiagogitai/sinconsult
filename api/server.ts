@@ -143,8 +143,8 @@ app.use(cors({
 // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
 // (Movido para depois do body-parser)
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
 // Implementação simples: recebe dados, retorna 200 OK, encaminha para GAS
