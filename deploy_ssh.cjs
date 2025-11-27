@@ -9,6 +9,8 @@ const config = {
 
 const commands = [
     'cd ~/simconsult',
+    'echo "=== Criando backup do banco de dados ==="',
+    'cp database.sqlite database.backup.$(date +%Y%m%d_%H%M%S).sqlite 2>/dev/null || echo "Banco não existe ainda"',
     'echo "=== Atualizando código ==="',
     'git fetch origin',
     'git pull --rebase origin main',
