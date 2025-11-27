@@ -5111,22 +5111,14 @@ app.post('/api/webhooks/evolution', asyncHandler(async (req, res) => {
     } else if (event === 'connection.update') {
       // Atualização de conexão da instância
       if (data.instance && data.state) {
-        await dbRun(`
-          UPDATE whatsapp_instances 
-          SET status = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE instance_id = ?
-  `, [data.state, data.instance]);
+        await dbRun('UPDATE whatsapp_instances SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE instance_id = ?', [data.state, data.instance]);
 
         logger.info(`Status da instância ${ data.instance }: ${ data.state } `);
       }
     } else if (event === 'qrcode.updated') {
       // QR Code atualizado
       if (data.instance && data.qrcode) {
-        await dbRun(`
-          UPDATE whatsapp_instances 
-          SET qrcode = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE instance_id = ?
-  `, [data.qrcode, data.instance]);
+        await dbRun('UPDATE whatsapp_instances SET qrcode = ?, updated_at = CURRENT_TIMESTAMP WHERE instance_id = ?', [data.qrcode, data.instance]);
 
         logger.info(`QR Code atualizado para instância ${ data.instance } `);
       }
