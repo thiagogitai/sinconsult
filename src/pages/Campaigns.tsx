@@ -55,6 +55,22 @@ const Campaigns: React.FC = () => {
   const [copiedPhones, setCopiedPhones] = useState(false);
   const [copiedRows, setCopiedRows] = useState(false);
 
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
   useEffect(() => {
     fetchCampaigns();
     fetchSegments();
@@ -607,7 +623,7 @@ const Campaigns: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                    {campaign.schedule}
+                    {formatDate(campaign.schedule)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="space-y-2">
