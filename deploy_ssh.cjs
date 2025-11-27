@@ -11,7 +11,7 @@ const commands = [
     'cd ~/simconsult',
     'echo "=== Atualizando código ==="',
     'git fetch origin',
-    'git reset --hard origin/main',
+    'git pull --rebase origin main',
     'git status',
     'echo "=== Instalando dependências ==="',
     'npm install',

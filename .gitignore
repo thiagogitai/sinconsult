@@ -34,6 +34,10 @@ dist-ssr
 # Database
 data/*.db
 data/*.db-journal
+database.sqlite
+database.sqlite-journal
+database.sqlite-wal
+database.sqlite-shm
 
 # Build outputs
 build
