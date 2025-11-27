@@ -1,3 +1,4 @@
+// Server.ts - Versão Atualizada com Fix de Áudio e Sintaxe
 import express from 'express';
 import type { Request } from 'express';
 import cors from 'cors';
