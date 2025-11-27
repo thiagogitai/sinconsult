@@ -277,7 +277,6 @@ const Import: React.FC = () => {
                     <li>• A planilha deve conter as colunas: <strong>Nome</strong>, <strong>Telefone</strong>, <strong>Email</strong> (opcional), <strong>Tags</strong> (opcional)</li>
                     <li>• O telefone deve estar no formato internacional: +55 11 98765-4321</li>
                     <li>• Use tags separadas por vírgula para segmentação (ex: cliente,vip,prospect)</li>
-                    <li>• Máximo de 1000 contatos por importação</li>
                     <li>• Contatos duplicados serão automaticamente ignorados</li>
                     <li>• Use a primeira linha para os cabeçalhos das colunas</li>
                   </ul>

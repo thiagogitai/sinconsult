@@ -1350,7 +1350,7 @@ app.get('/api/contacts', authenticateToken, asyncHandler(async (req, res) => {
       query += ` AND (is_blocked = false OR is_blocked IS NULL)`;
     }
 
-    query += ` ORDER BY created_at DESC LIMIT 100`;
+    query += ` ORDER BY created_at DESC LIMIT 5000`;
 
     const contacts = await dbAll(query, params);
     res.json(contacts);
@@ -1376,6 +1376,27 @@ app.patch('/api/contacts/:id/block', authenticateToken, asyncHandler(async (req,
     res.json(updatedContact);
   } catch (error) {
     logger.error('Erro ao bloquear/desbloquear contato:', { error });
+    throw error;
+  }
+}));
+
+// Deletar contato (requer autenticação)
+app.delete('/api/contacts/:id', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verificar se o contato existe
+    const contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [id]);
+    if (!contact) {
+      return res.status(404).json({ error: 'Contato não encontrado' });
+    }
+
+    // Deletar contato
+    await dbRun('DELETE FROM contacts WHERE id = ?', [id]);
+
+    res.json({ success: true, message: 'Contato deletado com sucesso' });
+  } catch (error) {
+    logger.error('Erro ao deletar contato:', { error });
     throw error;
   }
 }));
@@ -5009,7 +5030,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
             if (campaign.message_type === 'text') {
               resp = await evolutionAPI.sendTextMessage(instance.name || instance.instance_id, {
                 number: contact.phone,
-                text: campaign.message_template,
+                text: campaign.message || '',
                 delay: messageDelay
               });
               sent = true;
@@ -5019,7 +5040,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
               resp = await evolutionAPI.sendImage(instance.name || instance.instance_id, {
                 number: contact.phone,
                 media: mediaContent,
-                caption: campaign.message_template,
+                caption: campaign.message || '',
                 delay: messageDelay
               });
               sent = true;
@@ -5029,7 +5050,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
               resp = await evolutionAPI.sendVideo(instance.name || instance.instance_id, {
                 number: contact.phone,
                 media: videoContent,
-                caption: campaign.message_template,
+                caption: campaign.message || '',
                 delay: messageDelay
               });
               sent = true;

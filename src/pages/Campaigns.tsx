@@ -259,7 +259,7 @@ const Campaigns: React.FC = () => {
     try {
       const campaignData = {
         name: formData.name,
-        message_template: formData.message,
+        message: formData.message,
         message_type: formData.type,
         segment_id: formData.segment_id,
         schedule_time: formData.schedule,

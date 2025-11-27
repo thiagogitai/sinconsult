@@ -219,6 +219,7 @@ class EvolutionAPI {
   // Enviar mensagem de texto
   async sendTextMessage(instanceName: string, message: EvolutionTextMessage): Promise<EvolutionMessageResponse> {
     try {
+      console.log(`[EvolutionAPI] Enviando texto para ${message.number} via ${instanceName}: "${message.text}"`);
       const response = await axios.post(`${this.baseURL}/message/sendText/${instanceName}`, message, {
         headers: this.getHeaders(),
       });
@@ -269,6 +270,8 @@ class EvolutionAPI {
         delay: message.delay
       };
 
+      console.log(`[EvolutionAPI] Enviando imagem para ${message.number} via ${instanceName}`, { caption: message.caption });
+
       // Evolution API v2 usa /message/sendMedia para todos os tipos de mídia
       const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
         headers: this.getHeaders(),
@@ -292,13 +295,24 @@ class EvolutionAPI {
         }
       }
 
+      // Tentar detectar mimetype se for URL ou base64 conhecido
+      let mimetype = 'audio/mp4'; // Padrão para PTT/Voice Note
+      if (message.audio) {
+        if (message.audio.endsWith('.mp3')) mimetype = 'audio/mpeg';
+        else if (message.audio.endsWith('.ogg')) mimetype = 'audio/ogg';
+        else if (message.audio.startsWith('data:audio/mpeg')) mimetype = 'audio/mpeg';
+        else if (message.audio.startsWith('data:audio/ogg')) mimetype = 'audio/ogg';
+      }
+
       const payload = {
         number: message.number,
         mediatype: 'audio',
-        mimetype: 'audio/mp4',
+        mimetype: mimetype,
         media: cleanAudio,
         delay: message.delay
       };
+
+      console.log(`[EvolutionAPI] Enviando áudio para ${message.number} via ${instanceName}`, { mimetype });
 
       // Usar sendMedia para áudio também
       const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
@@ -342,6 +356,8 @@ class EvolutionAPI {
         caption: message.caption,
         delay: message.delay
       };
+
+      console.log(`[EvolutionAPI] Enviando vídeo para ${message.number} via ${instanceName}`, { caption: message.caption });
 
       // Evolution API v2 usa /message/sendMedia para todos os tipos de mídia
       const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
