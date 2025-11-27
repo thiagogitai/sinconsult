@@ -1,4 +1,3 @@
-// Server.ts - Versão Atualizada com Fix de Áudio e Sintaxe
 import express from 'express';
 import type { Request } from 'express';
 import cors from 'cors';
@@ -5111,14 +5110,22 @@ app.post('/api/webhooks/evolution', asyncHandler(async (req, res) => {
     } else if (event === 'connection.update') {
       // Atualização de conexão da instância
       if (data.instance && data.state) {
-        await dbRun('UPDATE whatsapp_instances SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE instance_id = ?', [data.state, data.instance]);
+        await dbRun(`
+          UPDATE whatsapp_instances 
+          SET status = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE instance_id = ?
+  `, [data.state, data.instance]);
 
         logger.info(`Status da instância ${ data.instance }: ${ data.state } `);
       }
     } else if (event === 'qrcode.updated') {
       // QR Code atualizado
       if (data.instance && data.qrcode) {
-        await dbRun('UPDATE whatsapp_instances SET qrcode = ?, updated_at = CURRENT_TIMESTAMP WHERE instance_id = ?', [data.qrcode, data.instance]);
+        await dbRun(`
+          UPDATE whatsapp_instances 
+          SET qrcode = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE instance_id = ?
+  `, [data.qrcode, data.instance]);
 
         logger.info(`QR Code atualizado para instância ${ data.instance } `);
       }
@@ -5302,190 +5309,6 @@ async function createTables(): Promise<void> {
 
 // ===== ROTA DE TESTE DE ENVIO DE IMAGEM =====
 app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res) => {
-  `, [data.qrcode, data.instance]);
-
-logger.info(`QR Code atualizado para instância ${data.instance} `);
-      }
-    }
-
-res.json({ received: true });
-  } catch (error) {
-  logger.error('Erro ao processar webhook:', { error });
-  throw error;
-}
-}));
-
-// Função auxiliar para determinar status da mensagem
-function getMessageStatusFromEvent(data: any): string | null {
-  if (data.update && data.update.pollUpdates) {
-    return 'delivered';
-  }
-
-  if (data.messageTimestamp) {
-    return 'sent';
-  }
-
-  if (data.key && data.key.fromMe) {
-    return 'sent';
-  }
-
-  return null;
-}
-
-// Configurações de segurança (requer autenticação)
-app.get('/api/security/configs', authenticateToken, asyncHandler(async (req, res) => {
-  try {
-    // SQLite não tem tabela security_configs, retornar dados mockados
-    res.json([]);
-  } catch (error) {
-    logger.error('Erro ao buscar configurações de segurança:', { error });
-    throw error;
-  }
-}));
-
-// ===== ROTA CATCH-ALL PARA SPA (deve vir antes do errorHandler) =====
-// Servir index.html para todas as rotas que não são API ou arquivos estáticos
-const projectRootForSPA = path.resolve(__dirname, '../..');
-const distPathForSPA = path.join(projectRootForSPA, 'dist');
-app.get('*', (req, res, next) => {
-  // Se for rota de API, passar adiante
-  if (req.path.startsWith('/api')) {
-    return next();
-  }
-
-  // Se for arquivo estático (tem extensão), tentar servir
-  if (req.path.includes('.')) {
-    const filePath = path.join(distPathForSPA, req.path);
-    if (fs.existsSync(filePath)) {
-      return res.sendFile(path.resolve(filePath));
-    }
-    // Tentar caminho alternativo
-    const altFilePath = path.join(__dirname, '../dist', req.path);
-    if (fs.existsSync(altFilePath)) {
-      return res.sendFile(path.resolve(altFilePath));
-    }
-    return next();
-  }
-
-  // Para todas as outras rotas, servir index.html (SPA)
-  const indexPath = path.join(distPathForSPA, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    logger.info('✅ Servindo index.html para rota:', req.path);
-    return res.sendFile(path.resolve(indexPath));
-  }
-
-  // Tentar caminho alternativo
-  const altIndexPath = path.join(__dirname, '../dist', 'index.html');
-  if (fs.existsSync(altIndexPath)) {
-    logger.info('✅ Servindo index.html (caminho alternativo) para rota:', req.path);
-    return res.sendFile(path.resolve(altIndexPath));
-  }
-
-  logger.warn('❌ index.html não encontrado em:', indexPath);
-  logger.warn('   Tentou também:', altIndexPath);
-  next();
-});
-
-// ===== MIDDLEWARE DE ERRO (deve ser o último) =====
-app.use(errorHandler);
-
-// ===== INICIAR SERVIDOR =====
-
-// Inicializar SQLite e depois iniciar servidor
-// Executar processamento de campanhas agendadas imediatamente (requer autenticação)
-app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, res) => {
-  try {
-    await loadEvolutionConfigFromDB();
-    const campaigns: any[] = await dbAll(`
-SELECT
-c.id,
-  c.name,
-  c.status,
-  c.message as message_template,
-  c.message_type,
-  c.media_url,
-  c.target_segment,
-  c.is_test,
-  c.test_phone,
-  GROUP_CONCAT(co.id) as contact_ids
-      FROM campaigns c
-      LEFT JOIN contacts co ON(c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
-      WHERE c.status = 'scheduled' 
-        AND c.scheduled_at <= CURRENT_TIMESTAMP
-      GROUP BY c.id
-    `);
-
-    const results: any[] = [];
-    for (const campaign of campaigns) {
-      await dbRun(`UPDATE campaigns SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE id = ? `, [campaign.id]);
-      let contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
-      if (campaign.is_test) {
-        if (campaign.test_phone && String(campaign.test_phone).trim() !== '') {
-          const phone = normalizePhone(String(campaign.test_phone));
-          let contact = await dbGet('SELECT id FROM contacts WHERE phone = ?', [phone]);
-          if (!contact) {
-            const insert = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, true)', ['Teste', phone]);
-            contact = { id: insert.lastID } as any;
-          }
-          contactIds = [String(contact.id)];
-        } else {
-          contactIds = contactIds.slice(0, 1);
-        }
-      }
-      await processCampaignWithQueue(campaign, contactIds);
-      results.push({ id: campaign.id, name: campaign.name });
-    }
-
-    res.json({ success: true, processed: results.length, campaigns: results });
-  } catch (error: any) {
-    logger.error('Erro ao executar processamento imediato:', { error: error.message });
-    res.status(500).json({ success: false, error: 'Erro ao processar campanhas', details: error.message });
-  }
-}));
-
-// Função para criar tabelas SQLite
-
-// Funcao para criar tabelas SQLite
-async function createTables(): Promise<void> {
-  try {
-    const schemaCandidates = [
-      path.join(__dirname, '../database/schema.sql'),
-      path.join(__dirname, '../../database/schema.sql'),
-      path.join(process.cwd(), 'database/schema.sql'),
-    ];
-
-    const schemaPath = schemaCandidates.find(p => fs.existsSync(p));
-
-    if (schemaPath) {
-      const schema = fs.readFileSync(schemaPath, 'utf-8');
-
-      // Executar o schema SQL
-      const commands = schema.split(';').filter(cmd => cmd.trim().length > 0);
-
-      for (const command of commands) {
-        try {
-          await dbRun(command.trim());
-        } catch (error: any) {
-          // Ignorar erros de "ja existe" mas logar outros erros
-          if (!error.message?.includes('already exists')) {
-            logger.warn('Aviso ao executar comando SQL:', { error: error.message });
-          }
-        }
-      }
-
-      logger.info('Tabelas criadas/verificadas com sucesso!');
-    } else {
-      logger.warn('Arquivo schema.sql nao encontrado, criando tabelas manualmente...');
-      // TODO: adicionar criacao manual de tabelas se necessario
-    }
-  } catch (error) {
-    logger.error('Erro ao criar tabelas:', { error });
-    throw error;
-  }
-}
-
-// ===== ROTA DE TESTE DE ENVIO DE IMAGEM =====
-app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res) => {
   try {
     const { phone_number, media_url } = req.body;
     const testPhone = phone_number || '65981173624';
@@ -5496,7 +5319,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
       WHERE status IN('connected', 'open') AND(is_active = true OR is_active IS NULL)
       ORDER BY last_connection DESC 
       LIMIT 1
-    `);
+  `);
 
     if (!instance) {
       return res.status(400).json({
@@ -5513,8 +5336,8 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
         const files = fs.readdirSync(uploadsDir);
         const imageFiles = files.filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f));
         if (imageFiles.length > 0) {
-          finalMediaUrl = `/api/uploads/${imageFiles[0]}`;
-          logger.info(`Usando imagem encontrada: ${imageFiles[0]}`);
+          finalMediaUrl = `/ api / uploads / ${ imageFiles[0] } `;
+          logger.info(`Usando imagem encontrada: ${ imageFiles[0] } `);
         }
       }
     }
@@ -5539,7 +5362,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
     // Preparar mídia (converter para Base64 se necessário)
     const finalMedia = await getMediaContent(finalMediaUrl);
 
-    logger.info(`Enviando imagem de teste para ${testPhone}`, {
+    logger.info(`Enviando imagem de teste para ${ testPhone } `, {
       instance: instance.name || instance.instance_id,
       mediaUrl: finalMediaUrl,
       mediaType: finalMedia.startsWith('data:') ? 'base64' : 'url'
@@ -5555,7 +5378,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
     // Criar registro de mensagem
     await dbRun(`
       INSERT INTO messages(contact_id, content, message_type, media_url, status, sent_at, evolution_id)
-      VALUES(?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+VALUES(?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
     `, [
       contact.id,
       'Teste de envio de imagem 🖼️',
@@ -5598,19 +5421,19 @@ initDatabase()
 
     // Iniciar servidor
     app.listen(PORT, () => {
-      logger.info(`Servidor rodando na porta ${PORT}`);
+      logger.info(`Servidor rodando na porta ${ PORT } `);
       logger.info(`Dashboard: http://localhost:${PORT}`);
-      logger.info(`API: http://localhost:${PORT}/api`);
+logger.info(`API: http://localhost:${PORT}/api`);
 
-      // Iniciar cron jobs após o servidor estar rodando
-      logger.info('Iniciando agendador de campanhas...');
+// Iniciar cron jobs após o servidor estar rodando
+logger.info('Iniciando agendador de campanhas...');
 
-      // Agendar campanhas (executa a cada minuto)
-      cron.schedule('* * * * *', async () => {
-        try {
-          logger.debug('Verificando campanhas agendadas...');
+// Agendar campanhas (executa a cada minuto)
+cron.schedule('* * * * *', async () => {
+  try {
+    logger.debug('Verificando campanhas agendadas...');
 
-          const campaigns = await dbAll(`
+    const campaigns = await dbAll(`
             SELECT 
               c.id,
               c.name,
@@ -5618,7 +5441,7 @@ initDatabase()
               c.message_type,
               c.media_url,
               c.target_segment,
-              GROUP_CONCAT(co.id) as contact_ids
+            GROUP_CONCAT(co.id) as contact_ids
             FROM campaigns c
             LEFT JOIN contacts co ON (
               (c.target_segment IS NULL OR c.target_segment = '') -- Se não tem segmento, pega todos (comportamento padrão?)
@@ -5630,51 +5453,51 @@ initDatabase()
             GROUP BY c.id
           `);
 
-          for (const campaign of campaigns) {
-            logger.info(`Processando campanha: ${campaign.name} (ID: ${campaign.id})`);
-            logger.info(`Segmento alvo: "${campaign.target_segment}"`);
+    for (const campaign of campaigns) {
+      logger.info(`Processando campanha: ${campaign.name} (ID: ${campaign.id})`);
+      logger.info(`Segmento alvo: "${campaign.target_segment}"`);
 
-            // Se o usuário definiu um segmento mas não encontrou contatos, pode ser que o JOIN falhou ou não há contatos nesse segmento
-            if (campaign.target_segment && (!campaign.contact_ids || campaign.contact_ids.length === 0)) {
-              logger.warn(`Campanha ${campaign.name} tem segmento "${campaign.target_segment}" mas nenhum contato foi encontrado.`);
-            }
+      // Se o usuário definiu um segmento mas não encontrou contatos, pode ser que o JOIN falhou ou não há contatos nesse segmento
+      if (campaign.target_segment && (!campaign.contact_ids || campaign.contact_ids.length === 0)) {
+        logger.warn(`Campanha ${campaign.name} tem segmento "${campaign.target_segment}" mas nenhum contato foi encontrado.`);
+      }
 
-            // Atualizar status da campanha
-            await dbRun(`
+      // Atualizar status da campanha
+      await dbRun(`
               UPDATE campaigns 
               SET status = 'running', updated_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [campaign.id]);
 
-            // Obter contatos da campanha
-            const contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
+      // Obter contatos da campanha
+      const contactIds = campaign.contact_ids ? campaign.contact_ids.split(',') : [];
 
-            if (contactIds.length === 0) {
-              logger.warn(`Nenhum contato encontrado para a campanha ${campaign.name}`);
-              await dbRun(`
+      if (contactIds.length === 0) {
+        logger.warn(`Nenhum contato encontrado para a campanha ${campaign.name}`);
+        await dbRun(`
                 UPDATE campaigns 
                 SET status = 'completed', updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
               `, [campaign.id]);
-              continue;
-            }
+        continue;
+      }
 
-            logger.info(`Encontrados ${contactIds.length} contatos para a campanha ${campaign.name}`);
+      logger.info(`Encontrados ${contactIds.length} contatos para a campanha ${campaign.name}`);
 
-            // Processar campanha com sistema de fila anti-bloqueio
-            await processCampaignWithQueue(campaign, contactIds);
-          }
+      // Processar campanha com sistema de fila anti-bloqueio
+      await processCampaignWithQueue(campaign, contactIds);
+    }
 
-        } catch (error) {
-          logger.error('Erro no agendamento:', { error });
-        }
-      });
+  } catch (error) {
+    logger.error('Erro no agendamento:', { error });
+  }
+});
     });
 
     // ===== WEBHOOK BRIDGE (Elementor → Google Apps Script) =====
     // (Movido para o início do arquivo, antes do body-parser)
   })
-  .catch((error) => {
-    logger.error('Erro ao inicializar banco de dados:', { error });
-    process.exit(1);
-  });
+  .catch (error => {
+  logger.error('Erro ao inicializar banco de dados:', { error });
+  process.exit(1);
+});
