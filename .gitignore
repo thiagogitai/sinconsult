@@ -58,3 +58,29 @@ dist-server
 # Uploads
 uploads/*
 !uploads/.gitkeep
+
+# Test and debug scripts
+*_test*.js
+*_test*.cjs
+diagnose_*.js
+diagnose_*.cjs
+check_*.cjs
+analyze_*.cjs
+cleanup_*.js
+cleanup_*.cjs
+refine_*.js
+recreate_*.js
+backup_*.cjs
+deep_*.cjs
+find_*.cjs
+fix_*.cjs
+remove_*.cjs
+run_*.cjs
+start_*.cjs
+test_*.cjs
+inspect_*.cjs
+sync_*.js
+update_*.cjs
+create_*_test*.js
+!src/**/*_test*.ts
+!src/**/*_test*.tsx
