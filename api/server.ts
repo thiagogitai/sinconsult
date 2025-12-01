@@ -13,7 +13,7 @@ import cron from 'node-cron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import EvolutionAPI from './services/evolution.js';
+import UAZAPI from './services/uazapi.js';
 import { TTSServiceFactory, saveAudioFile, generateAudioFilename } from './services/tts.js';
 import { authenticateToken, requireAdmin } from './middleware/auth.js';
 import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
@@ -45,34 +45,37 @@ const __dirname = path.dirname(__filename);
   }
 })();
 
-async function loadEvolutionConfigFromDB() {
+async function loadUAZAPIConfigFromDB() {
   try {
-    const urlRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['evolutionApiUrl', 'api']);
-    const keyRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['evolutionApiKey', 'api']);
-    const rawUrl = (urlRow && urlRow.value) ? urlRow.value : process.env.EVOLUTION_API_URL;
-    const rawKey = (keyRow && keyRow.value) ? keyRow.value : process.env.EVOLUTION_API_KEY;
+    const urlRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['uazapiUrl', 'api']);
+    const keyRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', ['uazapiKey', 'api']);
+
+    // Fallback para variáveis de ambiente antigas ou novas
+    const rawUrl = (urlRow && urlRow.value) ? urlRow.value : (process.env.UAZAPI_URL || process.env.EVOLUTION_API_URL);
+    const rawKey = (keyRow && keyRow.value) ? keyRow.value : (process.env.UAZAPI_KEY || process.env.EVOLUTION_API_KEY);
+
     const url = String(rawUrl || '').trim().replace(/`/g, '').replace(/\/+$/, '');
     const key = String(rawKey || '').trim().replace(/`/g, '');
 
     // Atualizar variáveis de ambiente
-    if (url) {
-      process.env.EVOLUTION_API_URL = url;
-    }
-    if (key) {
-      process.env.EVOLUTION_API_KEY = key;
-    }
+    if (url) process.env.UAZAPI_URL = url;
+    if (key) process.env.UAZAPI_KEY = key;
 
-    // Atualizar instância do EvolutionAPI
-    evolutionAPI.setConfig(url, key);
+    // Atualizar instância da UAZAPI
+    uazapi.setConfig(url, key);
 
-    logger.info('Configurações do Evolution carregadas do banco de dados', {
+    logger.info('Configurações da UAZAPI carregadas', {
       url: url || 'não configurado',
-      hasKey: !!key && key !== 'your-api-key'
+      hasKey: !!key
     });
   } catch (error: any) {
-    logger.warn('Erro ao carregar configurações do Evolution do banco:', { error: error.message });
-    // Continuar usando configurações do .env se houver erro
+    logger.warn('Erro ao carregar configurações da UAZAPI:', { error: error.message });
   }
+}
+
+// Compatibilidade com chamadas antigas
+async function loadEvolutionConfigFromDB() {
+  await loadUAZAPIConfigFromDB();
 }
 
 // Validar e gerar JWT_SECRET se necessário
@@ -106,8 +109,8 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secret-jwt
 const app = express();
 const PORT = process.env.PORT || 3006;
 
-// Configurar Evolution API
-const evolutionAPI = new EvolutionAPI();
+// Configurar UAZAPI
+const uazapi = new UAZAPI();
 
 // Middleware de segurança
 app.use(helmet({
@@ -229,6 +232,25 @@ function buildAbsoluteUrl(url: string, req?: Request): string {
   let rel = u.startsWith('/') ? u : `/${u}`;
   if (rel.startsWith('/uploads/')) rel = `/api${rel}`;
   return `${cleanBase}${rel}`;
+}
+
+function pad2(n: number): string { return n < 10 ? `0${n}` : `${n}`; }
+function formatCuiaba(date: Date): string {
+  const fmt = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Cuiaba',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+  const parts = fmt.formatToParts(date).reduce((acc: any, p) => { acc[p.type] = p.value; return acc; }, {} as any);
+  // parts: day, month, year, hour, minute, second
+  const y = parts.year, m = parts.month, d = parts.day, hh = parts.hour, mm = parts.minute, ss = parts.second;
+  return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+}
+function normalizeToCuiaba(input: string | number | Date | null | undefined): string | null {
+  if (!input) return null;
+  const d = new Date(input as any);
+  if (isNaN(d.getTime())) return null;
+  return formatCuiaba(d);
 }
 
 // Servir arquivos estáticos do frontend
@@ -675,7 +697,12 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       ORDER BY c.created_at DESC
     `);
 
-    res.json({ campaigns });
+    const mapped = (campaigns || []).map((c: any) => ({
+      ...c,
+      schedule_time: c.schedule_time ? normalizeToCuiaba(c.schedule_time) : null,
+      created_at: c.created_at ? normalizeToCuiaba(c.created_at) : null
+    }));
+    res.json({ campaigns: mapped });
   } catch (error) {
     logger.error('Erro ao buscar campanhas:', { error });
     throw error;
@@ -775,14 +802,11 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
     let initialStatus = 'draft';
 
     if (finalScheduleTime) {
-      try {
-        const date = new Date(finalScheduleTime);
-        if (!isNaN(date.getTime())) {
-          normalizedSchedule = date.toISOString();
-          // Se a data for futura, status é scheduled. Se for passada ou presente, pode ser executada imediatamente (mas vamos manter scheduled para o cron pegar)
-          initialStatus = 'scheduled';
-        }
-      } catch (e) {
+      const s = normalizeToCuiaba(finalScheduleTime);
+      if (s) {
+        normalizedSchedule = s;
+        initialStatus = 'scheduled';
+      } else {
         logger.warn('Data de agendamento inválida:', finalScheduleTime);
       }
     }
@@ -934,8 +958,8 @@ app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) =
     const schedRaw = scheduled_at ?? scheduled_time ?? schedule_time;
     let schedNorm: string | undefined = undefined;
     if (schedRaw) {
-      const s = String(schedRaw).replace('T', ' ').trim();
-      schedNorm = s.length === 16 ? `${s}:00` : s;
+      const s = normalizeToCuiaba(schedRaw);
+      if (s) schedNorm = s;
     }
     setIf('scheduled_at', schedNorm);
     setIf('use_tts', use_tts);
@@ -3864,7 +3888,7 @@ app.get('/api/whatsapp/test-connection', asyncHandler(async (req, res) => {
     console.log('API Key existente:', !!process.env.EVOLUTION_API_KEY);
     console.log('API Key length:', process.env.EVOLUTION_API_KEY?.length || 0);
 
-    const isConnected = await evolutionAPI.checkConnection();
+    const isConnected = await uazapi.checkConnection();
 
     console.log('Conexão Evolution API:', isConnected ? 'SUCESSO' : 'FALHA');
 
@@ -3895,7 +3919,7 @@ app.post('/api/whatsapp/instances/:name/webhook', authenticateToken, asyncHandle
     if (!url || String(url).trim() === '') {
       return res.status(400).json({ success: false, error: 'URL do webhook é obrigatória' });
     }
-    await evolutionAPI.setupWebhook(name, url);
+    await uazapi.setupWebhook(name, url);
     res.json({ success: true, message: 'Webhook configurado com sucesso' });
   } catch (error: any) {
     logger.error('Erro ao configurar webhook da instância:', { error: error.message });
@@ -3919,7 +3943,7 @@ app.post('/api/whatsapp/test-open', asyncHandler(async (req, res) => {
     }
 
     console.log('Criando instância:', name);
-    const evolutionInstance = await evolutionAPI.createInstance(name);
+    const evolutionInstance = await uazapi.createInstance(name);
     console.log('Instância criada com sucesso:', evolutionInstance);
 
     res.json({
@@ -3972,7 +3996,7 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
           const instanceName = instance.instance_id || instance.instance_name;
           logger.info(`Verificando status da instância ${instanceName} na Evolution API (status atual: ${instance.status})...`);
 
-          const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instanceName);
+          const evolutionStatus: any = await uazapi.getInstanceStatus(instanceName);
 
           // Evolution API pode retornar state aninhado em instance ou diretamente
           const instanceData = evolutionStatus.instance || evolutionStatus;
@@ -4042,9 +4066,9 @@ app.get('/api/whatsapp/instances', authenticateToken, asyncHandler(async (req, r
 // Health check do Evolution API (requer autenticação)
 app.get('/api/whatsapp/health', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const isConnected = await evolutionAPI.checkConnection();
-    const baseURL = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
-    const apiKey = process.env.EVOLUTION_API_KEY;
+    const isConnected = await uazapi.checkConnection();
+    const baseURL = process.env.UAZAPI_URL || process.env.EVOLUTION_API_URL || 'http://localhost:8080';
+    const apiKey = process.env.UAZAPI_KEY || process.env.EVOLUTION_API_KEY;
 
     res.json({
       isHealthy: isConnected,
@@ -4091,7 +4115,7 @@ app.post('/api/whatsapp/instances-debug', authenticateToken, asyncHandler(async 
 
     // Verificar se Evolution API está acessível
     console.log('Verificando conexão com Evolution API...');
-    const isConnected = await evolutionAPI.checkConnection();
+    const isConnected = await uazapi.checkConnection();
     console.log('Evolution API conectada:', isConnected);
 
     if (!isConnected) {
@@ -4105,7 +4129,7 @@ app.post('/api/whatsapp/instances-debug', authenticateToken, asyncHandler(async 
 
     // Criar instância na Evolution API
     console.log('Criando instância na Evolution API...');
-    const evolutionInstance = await evolutionAPI.createInstance(instanceName, phoneNumber);
+    const evolutionInstance = await uazapi.createInstance(instanceName, phoneNumber);
     console.log('Instância criada com sucesso:', evolutionInstance);
 
     res.json({
@@ -4179,7 +4203,7 @@ app.post('/api/whatsapp/instances',
 
       // Verificar se Evolution API está acessível
       console.log('Verificando conexão com Evolution API...');
-      const isConnected = await evolutionAPI.checkConnection();
+      const isConnected = await uazapi.checkConnection();
       console.log('Evolution API conectada:', isConnected);
 
       if (!isConnected) {
@@ -4191,8 +4215,7 @@ app.post('/api/whatsapp/instances',
         });
       }
 
-      // Criar instância na Evolution API
-      const evolutionInstance = await evolutionAPI.createInstance(instanceName, phoneNumber);
+      const evolutionInstance = await uazapi.createInstance(instanceName, phoneNumber);
 
       // A resposta do Evolution API pode ter diferentes formatos
       const instanceId = evolutionInstance.instanceId || evolutionInstance.instanceName || instanceName;
@@ -4202,7 +4225,7 @@ app.post('/api/whatsapp/instances',
       if (!qrcode) {
         try {
           logger.info('QR code não veio na criação, tentando gerar via connectInstance...');
-          const connectionData = await evolutionAPI.connectInstance(instanceName);
+          const connectionData = await uazapi.connectInstance(instanceName, phoneNumber, (evolutionInstance as any)?.token);
           qrcode = (connectionData as any).base64 || (connectionData as any).qrcode || null;
           if (qrcode && qrcode.startsWith('data:image')) {
             qrcode = qrcode.split(',')[1]; // Remover prefixo data:image
@@ -4272,6 +4295,7 @@ app.patch('/api/whatsapp/instances/:id/status', authenticateToken, asyncHandler(
 app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
+    const { phone } = req.body as any;
 
     // Buscar instância no banco
     const instance = await dbGet('SELECT * FROM whatsapp_instances WHERE id = ?', [id]);
@@ -4280,7 +4304,7 @@ app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(
     }
 
     // Conectar na Evolution API (gera QR Code)
-    const connectionData = await evolutionAPI.connectInstance(instance.instance_id);
+    const connectionData = await uazapi.connectInstance(instance.instance_id || instance.name, phone);
     const base64 = (connectionData as any).base64 as string | undefined;
     const code = (connectionData as any).code as string | undefined;
 
@@ -4317,6 +4341,108 @@ app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(
   }
 }));
 
+// Conectar por nome (sem criar instância local) e obter código de pareamento
+app.post('/api/whatsapp/instances/connect-by-name', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { name, phone, token } = req.body as any;
+    if (!name && !phone) return res.status(400).json({ error: 'Informe name ou phone' });
+    await loadEvolutionConfigFromDB();
+    // Persistir token de instância se informado
+    try {
+      if (name && token && String(token).trim()) {
+        await dbRun('INSERT OR REPLACE INTO app_settings (key, value, category) VALUES (?,?,?)', [`uazapiToken:${name}`, String(token).trim(), 'uazapi']);
+      }
+    } catch {}
+    const data = name ? await uazapi.connectInstance(String(name), phone, token ? String(token).trim() : undefined) : await uazapi.generatePairingCode(String(phone));
+    const base64 = (data as any)?.base64 as string | undefined;
+    const code = (data as any)?.code as string | undefined;
+    const base64Content = base64 && base64.startsWith('data:image') ? base64.split(',')[1] : base64 || null;
+    res.json({ qrcode: base64Content, qrcode_url: base64 || (base64Content ? `data:image/png;base64,${base64Content}` : null), code, status: 'connecting' });
+  } catch (error: any) {
+    logger.error('Erro em connect-by-name:', { error: error.message });
+    res.status(500).json({ error: 'Erro ao obter código de pareamento', details: error.message });
+  }
+}));
+
+// Registrar instância existente (apenas banco local) e opcionalmente salvar token
+app.post('/api/whatsapp/instances/register', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { name, instance_id, phone_connected, status, token } = req.body as any;
+    const instName = String(name || '').trim();
+    const instId = String(instance_id || instName || '').trim();
+    if (!instId && !instName) return res.status(400).json({ error: 'Informe name ou instance_id' });
+    const st = status && String(status).trim() ? String(status).trim() : 'connected';
+    await dbRun(`INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active)
+                VALUES (?, ?, ?, ?, 1)`, [instName || null, instId, phone_connected || null, st]);
+    const row = await dbGet('SELECT * FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [instId, instName]);
+    if (token && String(token).trim()) {
+      await dbRun('INSERT OR REPLACE INTO app_settings (key, value, category) VALUES (?,?,?)', [`uazapiToken:${instName || instId}`, String(token).trim(), 'uazapi']);
+    }
+    res.json({ success: true, instance: row });
+  } catch (error: any) {
+    logger.error('Erro ao registrar instância:', { error: error.message });
+    res.status(500).json({ error: 'Erro ao registrar instância', details: error.message });
+  }
+}));
+
+// Criar grupo e adicionar participantes
+app.post('/api/whatsapp/groups', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { name, participants, instance } = req.body as any;
+    const subject = String(name || 'Grupo').trim();
+    const instName = String(instance || 'simconsult').trim();
+    if (!participants || !Array.isArray(participants) || participants.length === 0) {
+      return res.status(400).json({ error: 'Informe participantes em formato E.164' });
+    }
+    // Obter token da instância
+    const keyName = `uazapiToken:${instName}`;
+    const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [keyName, 'uazapi']);
+    const instToken = tokRow?.value ? String(tokRow.value).trim() : null;
+    // Criar grupo
+    const grp = await uazapi.createGroup(subject, participants, instToken || undefined);
+    const groupId = (grp as any)?.id || (grp as any)?.chatId || (grp as any)?.groupId || null;
+    if (!groupId) {
+      return res.status(500).json({ error: 'Falha ao criar grupo', details: grp });
+    }
+    // Adicionar participantes (se necessário)
+    try {
+      await uazapi.addParticipants(groupId, participants, instToken || undefined);
+    } catch {}
+    res.json({ success: true, groupId, subject });
+  } catch (error: any) {
+    logger.error('Erro ao criar grupo:', { error: error.message });
+    res.status(500).json({ error: 'Erro ao criar grupo', details: error.message });
+  }
+}));
+
+app.get('/api/whatsapp/instances/sync', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const list = await uazapi.fetchInstances();
+    const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3006}`;
+    const webhookUrl = `${baseUrl.replace(/\/+$/, '')}/api/webhooks/uaz`;
+    const saved: any[] = [];
+    for (const it of list) {
+      const name = String((it as any).name || (it as any).instance || '').trim();
+      const iid = String((it as any).id || (it as any).instance_id || name || '').trim();
+      const phone = String((it as any).phone || (it as any).phone_connected || '').trim() || null;
+      const status = String((it as any).status || '').trim() || 'connected';
+      if (!name && !iid) continue;
+      const existing: any = await dbGet('SELECT id FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [iid, name]);
+      if (!existing) {
+        await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name || null, iid, phone, status]);
+      } else {
+        await dbRun('UPDATE whatsapp_instances SET name = ?, instance_id = ?, phone_connected = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [name || null, iid, phone, status, existing.id]);
+      }
+      try { await uazapi.setupWebhook(name || iid, webhookUrl); } catch {}
+      saved.push({ name, instance_id: iid, phone_connected: phone, status });
+    }
+    res.json({ success: true, instances: saved });
+  } catch (error: any) {
+    logger.error('Erro ao sincronizar instâncias:', { error: error.message });
+    res.status(500).json({ error: 'Erro ao sincronizar instâncias', details: error.message });
+  }
+}));
+
 // Desconectar instância (requer autenticação)
 app.post('/api/whatsapp/instances/:id/disconnect', authenticateToken, asyncHandler(async (req, res) => {
   try {
@@ -4329,7 +4455,7 @@ app.post('/api/whatsapp/instances/:id/disconnect', authenticateToken, asyncHandl
     }
 
     // Desconectar na Evolution API
-    await evolutionAPI.disconnectInstance(instance.instance_id);
+    await uazapi.disconnectInstance(instance.instance_id);
 
     // Atualizar status no banco
     await dbRun(`
@@ -4359,7 +4485,7 @@ app.delete('/api/whatsapp/instances/:id', authenticateToken, asyncHandler(async 
     // Deletar na Evolution API se tiver instance_id
     if (instance.instance_id) {
       try {
-        await evolutionAPI.deleteInstance(instance.instance_id);
+        await uazapi.deleteInstance(instance.instance_id);
       } catch (error) {
         logger.warn('Erro ao deletar instância na Evolution API (continuando):', { error });
       }
@@ -4391,7 +4517,7 @@ app.get('/api/whatsapp/instances/:id/status', authenticateToken, asyncHandler(as
 
     // Obter status da Evolution API
     try {
-      const evolutionStatus: any = await evolutionAPI.getInstanceStatus(instance.instance_id || instance.name);
+      const evolutionStatus: any = await uazapi.getInstanceStatus(instance.instance_id || instance.name);
 
       // Evolution API v2 retorna 'state' com valores: 'open', 'close', 'connecting'
       // Priorizar 'state' sobre 'status' pois é o campo principal da Evolution API v2
@@ -4509,6 +4635,17 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
       return res.status(400).json({ error: 'Instância não está conectada' });
     }
 
+    // Ajustar token da instância no cliente UAZAPI, se existir
+    let instToken: string | null = null;
+    try {
+      const keyName = `uazapiToken:${instance.name || instance.instance_id}`;
+      const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [keyName, 'uazapi']);
+      instToken = tokRow?.value ? String(tokRow.value).trim() : null;
+      if (instToken) {
+        // Não alterar baseURL; apenas usar token da instância em headers de envio
+      }
+    } catch {}
+
     // Normalizar telefone
     const normalizedPhone = normalizePhone(phone_number);
 
@@ -4546,27 +4683,27 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
       }
 
       if (message_type === 'image' && finalMedia) {
-        sentMessage = await evolutionAPI.sendImage(instance.name || instance_id, {
+        sentMessage = await uazapi.sendImage(instance.name || instance_id, {
           number: phone_number,
           caption: message,
           media: finalMedia
-        });
+        }, instToken);
       } else if ((message_type === 'audio' || message_type === 'audio_upload') && finalMedia) {
-        sentMessage = await evolutionAPI.sendAudio(instance.name || instance_id, {
+        sentMessage = await uazapi.sendAudio(instance.name || instance_id, {
           number: phone_number,
           audio: finalMedia
-        });
+        }, instToken);
       } else if (message_type === 'video' && finalMedia) {
-        sentMessage = await evolutionAPI.sendVideo(instance.name || instance_id, {
+        sentMessage = await uazapi.sendVideo(instance.name || instance_id, {
           number: phone_number,
           caption: message,
           media: finalMedia
-        });
+        }, instToken);
       } else {
-        sentMessage = await evolutionAPI.sendTextMessage(instance.name || instance_id, {
+        sentMessage = await uazapi.sendTextMessage(instance.name || instance_id, {
           number: phone_number,
           text: message
-        });
+        }, instToken);
       }
 
       // Atualizar status da mensagem
@@ -4654,24 +4791,24 @@ app.post('/api/messages/bulk-send', authenticateToken, asyncHandler(async (req, 
           }
 
           if (message_type === 'image' && finalMedia) {
-            sentMessage = await evolutionAPI.sendImage(instance.name || instance_id, {
+            sentMessage = await uazapi.sendImage(instance.name || instance_id, {
               number: contact.phone,
               caption: message,
               media: finalMedia
             });
           } else if (message_type === 'audio' && finalMedia) {
-            sentMessage = await evolutionAPI.sendAudio(instance.name || instance_id, {
+            sentMessage = await uazapi.sendAudio(instance.name || instance_id, {
               number: contact.phone,
               audio: finalMedia
             });
           } else if (message_type === 'video' && finalMedia) {
-            sentMessage = await evolutionAPI.sendVideo(instance.name || instance_id, {
+            sentMessage = await uazapi.sendVideo(instance.name || instance_id, {
               number: contact.phone,
               caption: message,
               media: finalMedia
             });
           } else {
-            sentMessage = await evolutionAPI.sendTextMessage(instance.name || instance_id, {
+            sentMessage = await uazapi.sendTextMessage(instance.name || instance_id, {
               number: contact.phone,
               text: message
             });
@@ -4819,24 +4956,24 @@ class MessageQueue {
       // Enviar mensagem via Evolution API
       let sentMessage;
       if (message_type === 'image' && finalMedia) {
-        sentMessage = await evolutionAPI.sendImage(instance_id, {
+        sentMessage = await uazapi.sendImage(instance_id, {
           number: contact.phone,
           caption: content,
           media: finalMedia
         });
       } else if (message_type === 'audio' && finalMedia) {
-        sentMessage = await evolutionAPI.sendAudio(instance_id, {
+        sentMessage = await uazapi.sendAudio(instance_id, {
           number: contact.phone,
           audio: finalMedia
         });
       } else if (message_type === 'video' && finalMedia) {
-        sentMessage = await evolutionAPI.sendVideo(instance_id, {
+        sentMessage = await uazapi.sendVideo(instance_id, {
           number: contact.phone,
           caption: content,
           media: finalMedia
         });
       } else {
-        sentMessage = await evolutionAPI.sendTextMessage(instance_id, {
+        sentMessage = await uazapi.sendTextMessage(instance_id, {
           number: contact.phone,
           text: content
         });
@@ -5028,7 +5165,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
           try {
             let resp: any = null;
             if (campaign.message_type === 'text') {
-              resp = await evolutionAPI.sendTextMessage(instance.name || instance.instance_id, {
+              resp = await uazapi.sendTextMessage(instance.name || instance.instance_id, {
                 number: contact.phone,
                 text: campaign.message || '',
                 delay: messageDelay
@@ -5037,7 +5174,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
             } else if (campaign.message_type === 'image' && campaign.media_url) {
               // Converter URL local para Base64 se necessário
               const mediaContent = await getMediaContent(campaign.media_url);
-              resp = await evolutionAPI.sendImage(instance.name || instance.instance_id, {
+              resp = await uazapi.sendImage(instance.name || instance.instance_id, {
                 number: contact.phone,
                 media: mediaContent,
                 caption: campaign.message || '',
@@ -5047,7 +5184,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
             } else if (campaign.message_type === 'video' && campaign.media_url) {
               // Converter URL local para Base64 se necessário
               const videoContent = await getMediaContent(campaign.media_url);
-              resp = await evolutionAPI.sendVideo(instance.name || instance.instance_id, {
+              resp = await uazapi.sendVideo(instance.name || instance.instance_id, {
                 number: contact.phone,
                 media: videoContent,
                 caption: campaign.message || '',
@@ -5059,7 +5196,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
               if (audioUrl) {
                 // Converter URL local para Base64 se necessário
                 const audioContent = await getMediaContent(audioUrl);
-                resp = await evolutionAPI.sendAudio(instance.name || instance.instance_id, {
+                resp = await uazapi.sendAudio(instance.name || instance.instance_id, {
                   number: contact.phone,
                   audio: audioContent,
                   delay: messageDelay,
@@ -5128,7 +5265,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
 // ===== ROTAS DE SEGURANÇA =====
 
 // Webhook para receber confirmações de entrega do Evolution API (sem autenticação - webhook externo)
-app.post('/api/webhooks/evolution', asyncHandler(async (req, res) => {
+app.post('/api/webhooks/uaz', asyncHandler(async (req, res) => {
   try {
     const { event, data } = req.body;
 
@@ -5417,7 +5554,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
     });
 
     // Enviar imagem via Evolution API
-    const sentMessage = await evolutionAPI.sendImage(instance.name || instance.instance_id, {
+    const sentMessage = await uazapi.sendImage(instance.name || instance.instance_id, {
       number: testPhone,
       caption: 'Teste de envio de imagem 🖼️',
       media: finalMedia

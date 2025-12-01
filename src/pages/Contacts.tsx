@@ -31,6 +31,15 @@ const Contacts: React.FC = () => {
     tags: ''
   });
   const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [sendType, setSendType] = useState<'text'|'image'|'video'|'audio'>('text');
+  const [sendMessageText, setSendMessageText] = useState('');
+  const [sendMediaUrl, setSendMediaUrl] = useState('');
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupName, setGroupName] = useState('SimConsult');
+  const [instanceModalOpen, setInstanceModalOpen] = useState(false);
+  const [instanceName, setInstanceName] = useState('');
+  const [instanceToken, setInstanceToken] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const contactsPerPage = 30;
 
@@ -454,6 +463,40 @@ const Contacts: React.FC = () => {
               <UserPlus className="h-4 w-4 sm:h-5 sm:w-5" />
               <span>Adicionar</span>
             </button>
+            <button
+              onClick={() => setSendModalOpen(true)}
+              className="bg-indigo-600 text-white hover:bg-indigo-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
+              disabled={selectedContacts.size === 0}
+            >
+              <span>Enviar Mensagem</span>
+            </button>
+            <button
+              onClick={() => setGroupModalOpen(true)}
+              className="bg-purple-600 text-white hover:bg-purple-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
+              disabled={selectedContacts.size === 0}
+            >
+              <span>Criar Grupo</span>
+            </button>
+            <button
+              onClick={() => setInstanceModalOpen(true)}
+              className="bg-gray-800 text-white hover:bg-black px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
+            >
+              <span>Cadastrar Instância</span>
+            </button>
+            <button
+              onClick={async()=>{
+                try {
+                  const token = localStorage.getItem('token');
+                  if (!token) { toast({ title:'Erro', description:'Autenticação necessária', variant:'destructive' }); return; }
+                  const resp = await fetch('/api/whatsapp/instances/sync', { headers:{ 'Authorization':`Bearer ${token}` } });
+                  const data = await resp.json();
+                  if (resp.ok) { toast({ title:'Instâncias sincronizadas', description: `${(data.instances||[]).length} instância(s)` }); } else { toast({ title:'Erro', description: data.error || 'Falha ao sincronizar', variant:'destructive' }); }
+                } catch { toast({ title:'Erro', description:'Falha ao sincronizar', variant:'destructive' }); }
+              }}
+              className="bg-gray-600 text-white hover:bg-gray-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
+            >
+              <span>Sincronizar Instâncias</span>
+            </button>
           </div>
         </div>
       </div>
@@ -512,6 +555,92 @@ const Contacts: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {sendModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+            <h3 className="text-xl font-semibold">Enviar Mensagem</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setSendType('text')} className={`px-3 py-2 rounded ${sendType==='text'?'bg-indigo-600 text-white':'bg-gray-100 text-gray-700'}`}>Texto</button>
+              <button onClick={() => setSendType('image')} className={`px-3 py-2 rounded ${sendType==='image'?'bg-indigo-600 text-white':'bg-gray-100 text-gray-700'}`}>Imagem</button>
+              <button onClick={() => setSendType('video')} className={`px-3 py-2 rounded ${sendType==='video'?'bg-indigo-600 text-white':'bg-gray-100 text-gray-700'}`}>Vídeo</button>
+              <button onClick={() => setSendType('audio')} className={`px-3 py-2 rounded ${sendType==='audio'?'bg-indigo-600 text-white':'bg-gray-100 text-gray-700'}`}>Áudio</button>
+            </div>
+            <div className="space-y-2">
+              <input value={sendMessageText} onChange={(e)=>setSendMessageText(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Mensagem" />
+              {(sendType==='image' || sendType==='video' || sendType==='audio') && (
+                <input value={sendMediaUrl} onChange={(e)=>setSendMediaUrl(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="URL da mídia (http...)" />
+              )}
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button onClick={()=>setSendModalOpen(false)} className="px-4 py-2 rounded bg-gray-200 text-gray-800">Cancelar</button>
+              <button onClick={async()=>{
+                try {
+                  const token = localStorage.getItem('token');
+                  if (!token) { toast({ title:'Erro', description:'Autenticação necessária', variant:'destructive' }); return; }
+                  const ids = Array.from(selectedContacts);
+                  let ok = 0; let fail = 0;
+                  for (const id of ids) {
+                    const c = contacts.find(cc=>cc.id===id);
+                    if (!c) { fail++; continue; }
+                    const body:any = { instance_id:'simconsult', phone_number:c.phone, message:sendMessageText || '', message_type:sendType };
+                    if (sendType!=='text') body.media_url = sendMediaUrl || '';
+                    const resp = await fetch('/api/messages/send', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` }, body: JSON.stringify(body) });
+                    if (resp.ok) ok++; else fail++;
+                  }
+                  toast({ title:'Envio concluído', description:`${ok} sucesso, ${fail} falha(s)` });
+                  setSendModalOpen(false); setSendMessageText(''); setSendMediaUrl('');
+                } catch { toast({ title:'Erro', description:'Falha ao enviar', variant:'destructive' }); }
+              }} className="px-4 py-2 rounded bg-indigo-600 text-white">Enviar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {groupModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+            <h3 className="text-xl font-semibold">Criar Grupo</h3>
+            <input value={groupName} onChange={(e)=>setGroupName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Nome do grupo" />
+            <div className="flex justify-end space-x-2">
+              <button onClick={()=>setGroupModalOpen(false)} className="px-4 py-2 rounded bg-gray-200 text-gray-800">Cancelar</button>
+              <button onClick={async()=>{
+                try {
+                  const token = localStorage.getItem('token');
+                  if (!token) { toast({ title:'Erro', description:'Autenticação necessária', variant:'destructive' }); return; }
+                  const ids = Array.from(selectedContacts);
+                  const parts = ids.map(id=>{ const c=contacts.find(cc=>cc.id===id); return c? c.phone : null; }).filter(Boolean);
+                  const resp = await fetch('/api/whatsapp/groups', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` }, body: JSON.stringify({ name: groupName, participants: parts, instance:'simconsult' }) });
+                  const data = await resp.json();
+                  if (resp.ok) { toast({ title:'Grupo criado', description:`ID: ${data.groupId}` }); setGroupModalOpen(false); } else { toast({ title:'Erro', description: data.error || 'Falha ao criar grupo', variant:'destructive' }); }
+                } catch { toast({ title:'Erro', description:'Falha ao criar grupo', variant:'destructive' }); }
+              }} className="px-4 py-2 rounded bg-purple-600 text-white">Criar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {instanceModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+            <h3 className="text-xl font-semibold">Cadastrar Instância</h3>
+            <input value={instanceName} onChange={(e)=>setInstanceName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Nome da instância" />
+            <input value={instanceToken} onChange={(e)=>setInstanceToken(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Token da instância" />
+            <div className="flex justify-end space-x-2">
+              <button onClick={()=>setInstanceModalOpen(false)} className="px-4 py-2 rounded bg-gray-200 text-gray-800">Cancelar</button>
+              <button onClick={async()=>{
+                try {
+                  const token = localStorage.getItem('token');
+                  if (!token) { toast({ title:'Erro', description:'Autenticação necessária', variant:'destructive' }); return; }
+                  const resp = await fetch('/api/whatsapp/instances/register', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` }, body: JSON.stringify({ name: instanceName.trim(), instance_id: instanceName.trim(), status:'connected', token: instanceToken.trim() }) });
+                  const data = await resp.json();
+                  if (resp.ok) { toast({ title:'Instância registrada', description: data.instance?.name || instanceName }); setInstanceModalOpen(false); setInstanceName(''); setInstanceToken(''); } else { toast({ title:'Erro', description: data.error || 'Falha ao registrar instância', variant:'destructive' }); }
+                } catch { toast({ title:'Erro', description:'Falha ao registrar instância', variant:'destructive' }); }
+              }} className="px-4 py-2 rounded bg-gray-800 text-white">Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

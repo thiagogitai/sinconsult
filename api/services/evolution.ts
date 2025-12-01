@@ -306,16 +306,15 @@ class EvolutionAPI {
 
       const payload = {
         number: message.number,
-        mediatype: 'audio',
-        mimetype: mimetype,
-        media: cleanAudio,
-        delay: message.delay
+        audio: cleanAudio, // sendWhatsAppAudio usa 'audio' em vez de 'media'
+        delay: message.delay,
+        encoding: true // Para base64
       };
 
-      console.log(`[EvolutionAPI] Enviando áudio para ${message.number} via ${instanceName}`, { mimetype });
+      console.log(`[EvolutionAPI] Enviando áudio (sendWhatsAppAudio) para ${message.number} via ${instanceName}`, { mimetype });
 
-      // Usar sendMedia para áudio também
-      const response = await axios.post(`${this.baseURL}/message/sendMedia/${instanceName}`, payload, {
+      // Tentar usar endpoint específico de áudio
+      const response = await axios.post(`${this.baseURL}/message/sendWhatsAppAudio/${instanceName}`, payload, {
         headers: this.getHeaders(),
       });
 
