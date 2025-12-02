@@ -21,6 +21,7 @@ const Campaigns: React.FC = () => {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [segments, setSegments] = useState<any[]>([]);
   const [savedTTSFiles, setSavedTTSFiles] = useState<any[]>([]); // Novo estado para arquivos TTS salvos
+  const [waInstances, setWaInstances] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<any>(null);
@@ -40,6 +41,7 @@ const Campaigns: React.FC = () => {
     email_subject: '',
     email_template_id: '',
     media_url: '', // URL da imagem ou vídeo
+    instance_name: '',
     is_test: false,
     test_phone: ''
   });
@@ -79,6 +81,7 @@ const Campaigns: React.FC = () => {
     fetchSMSTemplates();
     fetchEmailConfigs();
     fetchEmailTemplates();
+    fetchWAInstances();
   }, []);
 
   const fetchSMSConfigs = async () => {
@@ -137,6 +140,22 @@ const Campaigns: React.FC = () => {
     }
   };
 
+  const fetchWAInstances = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const response = await fetch('/api/whatsapp/instances', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setWaInstances(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar instâncias WhatsApp:', error);
+    }
+  };
+
   const fetchSavedTTSFiles = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -161,7 +180,8 @@ const Campaigns: React.FC = () => {
         ...c,
         message: c.message ?? c.message_template ?? '',
         type: c.type ?? c.message_type ?? 'text',
-        schedule: c.schedule ?? c.scheduled_time ?? c.schedule_time ?? ''
+        schedule: c.schedule ?? c.scheduled_time ?? c.schedule_time ?? '',
+        instance_name: c.instance_name || ''
       }));
       // Métricas agregadas já vêm do GET /api/campaigns; não buscar /stats aqui
       setCampaigns(normalized);
@@ -273,6 +293,7 @@ const Campaigns: React.FC = () => {
         email_subject: formData.channel === 'email' ? formData.email_subject : null,
         email_template_id: formData.channel === 'email' ? formData.email_template_id : null,
         media_url: formData.media_url || null,
+        instance_name: formData.channel === 'whatsapp' ? formData.instance_name : null,
         is_test: formData.is_test,
         test_phone: formData.is_test ? formData.test_phone : null,
         status: formData.schedule ? 'scheduled' : undefined
@@ -296,6 +317,7 @@ const Campaigns: React.FC = () => {
         email_subject: '',
         email_template_id: '',
         media_url: '',
+        instance_name: '',
         is_test: false,
         test_phone: ''
       });
@@ -327,6 +349,7 @@ const Campaigns: React.FC = () => {
       email_subject: campaign.email_subject || '',
       email_template_id: campaign.email_template_id || '',
       media_url: campaign.media_url || '',
+      instance_name: campaign.instance_name || '',
       is_test: !!campaign.is_test,
       test_phone: campaign.test_phone || ''
     });
@@ -347,6 +370,13 @@ const Campaigns: React.FC = () => {
         use_tts: formData.use_tts,
         tts_config_id: formData.use_tts ? formData.tts_config_id : null,
         tts_audio_file: formData.use_tts && formData.tts_audio_file ? formData.tts_audio_file : null,
+        channel: formData.channel,
+        sms_config_id: formData.channel === 'sms' ? formData.sms_config_id : null,
+        sms_template_id: formData.channel === 'sms' ? formData.sms_template_id : null,
+        email_config_id: formData.channel === 'email' ? formData.email_config_id : null,
+        email_subject: formData.channel === 'email' ? formData.email_subject : null,
+        email_template_id: formData.channel === 'email' ? formData.email_template_id : null,
+        instance_name: formData.channel === 'whatsapp' ? formData.instance_name : null,
         is_test: formData.is_test,
         test_phone: formData.is_test ? formData.test_phone : null,
         status: formData.schedule ? 'scheduled' : undefined
@@ -371,6 +401,7 @@ const Campaigns: React.FC = () => {
         email_subject: '',
         email_template_id: '',
         media_url: '',
+        instance_name: '',
         is_test: false,
         test_phone: ''
       });
@@ -518,6 +549,7 @@ const Campaigns: React.FC = () => {
                 email_subject: '',
                 email_template_id: '',
                 media_url: '',
+                instance_name: '',
                 is_test: false,
                 test_phone: ''
               });
@@ -609,6 +641,9 @@ const Campaigns: React.FC = () => {
                     <div className="space-y-1">
                       <div className="text-sm font-semibold text-gray-900">{campaign.name}</div>
                       <div className="text-sm text-gray-500 truncate max-w-xs">{campaign.message}</div>
+                      {campaign.instance_name ? (
+                        <div className="text-xs text-gray-500">Instância: {campaign.instance_name}</div>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -670,12 +705,9 @@ const Campaigns: React.FC = () => {
                         onClick={async () => {
                           try {
                             const token = localStorage.getItem('token');
-                            const deliveredResp = await fetch(`/api/campaigns/${campaign.id}/messages?status=delivered`, {
-                              headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
-                            });
-                            const failedResp = await fetch(`/api/campaigns/${campaign.id}/messages?status=failed`, {
-                              headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
-                            });
+                            const headers = token ? { 'Authorization': `Bearer ${token}` } : undefined;
+                            const deliveredResp = await fetch(`/api/campaigns/${campaign.id}/messages?status=all`, { headers });
+                            const failedResp = await fetch(`/api/campaigns/${campaign.id}/messages?status=failed`, { headers });
                             const deliveredData = deliveredResp.ok ? await deliveredResp.json() : { messages: [] };
                             const failedData = failedResp.ok ? await failedResp.json() : { messages: [] };
                             setStatsCampaignName(campaign.name);
@@ -761,6 +793,25 @@ const Campaigns: React.FC = () => {
                   <option value="email">Email</option>
                 </select>
               </div>
+
+              {formData.channel === 'whatsapp' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Instância WhatsApp</label>
+                  <select
+                    value={formData.instance_name}
+                    onChange={(e) => setFormData({ ...formData, instance_name: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all"
+                  >
+                    <option value="">Automático (primeira conectada)</option>
+                    {waInstances.map((inst) => (
+                      <option key={inst.id} value={inst.instance_name || inst.name || inst.instance_id}>
+                        {(inst.instance_name || inst.name || inst.instance_id) || 'Sem nome'} - {inst.status}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Quando escolhido, envia apenas pela instância selecionada.</p>
+                </div>
+              )}
 
 
 

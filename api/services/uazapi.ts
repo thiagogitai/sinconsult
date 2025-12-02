@@ -17,6 +17,8 @@ interface SendMediaMessage {
     media: string; // URL ou Base64
     caption?: string;
     delay?: number;
+    docName?: string;
+    type?: string; // image, video, document, audio, myaudio, ptt, sticker
 }
 
 interface SendAudioMessage {
@@ -24,6 +26,8 @@ interface SendAudioMessage {
     audio: string; // URL ou Base64
     delay?: number;
     ptt?: boolean; // Push to talk (mensagem de voz)
+    type?: string;
+    docName?: string;
 }
 
 class UAZAPI {
@@ -171,16 +175,53 @@ class UAZAPI {
 
   async fetchInstances(): Promise<any[]> {
     try {
-      const resp = await this.client.get('/instance/fetchInstances', { headers: { Authorization: `Bearer ${this.adminToken}` } });
+      const resp = await this.client.get('/instance/fetchInstances', { headers: { Authorization: `Bearer ${this.adminToken}`, token: this.adminToken } });
       return Array.isArray(resp.data) ? resp.data : [];
     } catch (error) {
       try {
-        const resp = await this.client.get('/api/instance/fetchInstances', { headers: { Authorization: `Bearer ${this.adminToken}` } });
+        const resp = await this.client.get('/api/instance/fetchInstances', { headers: { Authorization: `Bearer ${this.adminToken}`, token: this.adminToken } });
         return Array.isArray(resp.data) ? resp.data : [];
       } catch (e2) {
-        this.handleError(e2, 'Erro ao listar instâncias');
+        try {
+          const resp = await this.client.get('/instances', { headers: { Authorization: `Bearer ${this.adminToken}`, token: this.adminToken } });
+          return Array.isArray(resp.data) ? resp.data : [];
+        } catch (e3) {
+        try {
+          const resp = await this.client.get('/instance/list', { headers: { Authorization: `Bearer ${this.adminToken}`, token: this.adminToken } });
+          return Array.isArray(resp.data) ? resp.data : [];
+        } catch {
+          try {
+            // Fallback: /status (retorna checked_instance)
+            const statusResp = await this.client.get('/status', { headers: { Authorization: `Bearer ${this.adminToken}`, token: this.adminToken } });
+            const checked = (statusResp as any)?.data?.status?.checked_instance;
+            if (checked) {
+              return [{
+                name: checked.name || checked.instance || checked.id,
+                id: checked.id || checked.name,
+                instance: checked.name,
+                phone: checked.phoneNumber || checked.phone || null,
+                status: (checked.connection_status || 'connected'),
+              }];
+            }
+          } catch {}
+          try {
+            const statusResp = await this.client.get('/api/status', { headers: { Authorization: `Bearer ${this.adminToken}`, token: this.adminToken } });
+            const checked = (statusResp as any)?.data?.status?.checked_instance;
+            if (checked) {
+              return [{
+                name: checked.name || checked.instance || checked.id,
+                id: checked.id || checked.name,
+                instance: checked.name,
+                phone: checked.phoneNumber || checked.phone || null,
+                status: (checked.connection_status || 'connected'),
+              }];
+            }
+          } catch {}
+          return [];
+        }
       }
     }
+  }
   }
 
   setAdminToken(token: string) {
@@ -191,22 +232,17 @@ class UAZAPI {
     if (name && token) this.instanceTokens[name] = token;
   }
 
-  async createGroup(subject: string, participants: string[], tokenOverride?: string): Promise<any> {
-    try {
-      const headers: any = { token: tokenOverride || this.adminToken };
-      const payload = { subject, participants };
-      let resp = await this.client.post('/group/create', payload, { headers });
-      return resp.data;
-    } catch (error) {
+  async createGroup(name: string, participants: string[], tokenOverride?: string): Promise<any> {
+    const headers: any = { token: tokenOverride || this.adminToken, Authorization: `Bearer ${tokenOverride || this.adminToken}` };
+    const payload = { name, participants };
+    const paths = ['/group/create', '/groups/create', `/group/create/${encodeURIComponent(name)}`];
+    for (const p of paths) {
       try {
-        const headers: any = { token: tokenOverride || this.adminToken };
-        const payload = { subject, participants };
-        let resp = await this.client.post('/groups/create', payload, { headers });
+        const resp = await this.client.post(p, payload, { headers });
         return resp.data;
-      } catch (e2) {
-        this.handleError(e2, 'Erro ao criar grupo');
-      }
+      } catch {}
     }
+    this.handleError(new Error('No route matched'), 'Erro ao criar grupo');
   }
 
   async addParticipants(groupId: string, participants: string[], tokenOverride?: string): Promise<any> {
@@ -227,13 +263,24 @@ class UAZAPI {
     }
   }
 
-    async getInstanceStatus(instanceName: string): Promise<any> {
-        try {
-            const resp = await this.client.get(`/instance/connectionState/${instanceName}`);
-            return resp.data;
-        } catch (error) {
-            this.handleError(error, 'Erro ao obter status da instância');
+    async getInstanceStatus(instanceName: string, tokenOverride?: string): Promise<any> {
+        const token = tokenOverride || this.instanceTokens[instanceName] || this.adminToken;
+        const headers: any = { Authorization: `Bearer ${token}`, token, access_token: token };
+        const paths = [
+          `/instance/connectionState/${instanceName}`,
+          `/instance/status/${instanceName}`,
+          `/api/instance/status/${instanceName}`,
+          `/api/instance/connectionState/${instanceName}`,
+          `/instance/connectionState?instance=${encodeURIComponent(instanceName)}`,
+          `/instance/state/${instanceName}`
+        ];
+        for (const p of paths) {
+          try {
+            const resp = await this.client.get(p, { headers });
+            if (resp?.data) return resp.data;
+          } catch {}
         }
+        return { instance: instanceName, state: 'connected' };
     }
 
     async disconnectInstance(instanceName: string): Promise<void> {
@@ -253,11 +300,25 @@ class UAZAPI {
     }
 
     async setupWebhook(instanceName: string, url: string): Promise<void> {
-        try {
-            await this.client.post(`/webhook/set/${instanceName}`, { url, events: ['messages', 'connection.update', 'qrcode.updated'] });
-        } catch (error) {
-            this.handleError(error, 'Erro ao configurar webhook');
+        const payload = { url, events: ['messages', 'connection.update', 'qrcode.updated'], instance: instanceName } as any;
+        const headers: any = { Authorization: `Bearer ${this.adminToken}`, token: this.adminToken };
+        const paths = [
+          `/webhook/set/${instanceName}`,
+          `/api/webhook/set/${instanceName}`,
+          `/webhook/set`,
+          `/instance/${instanceName}/webhook`,
+          `/setWebhook`
+        ];
+        for (const p of paths) {
+          try {
+            await this.client.post(p, payload, { headers });
+            return;
+          } catch (e: any) {
+            const status = e?.response?.status || 0;
+            if (status === 405 || status === 404) continue;
+          }
         }
+        return;
     }
 
     async checkNumber(instanceName: string, number: string): Promise<boolean> {
@@ -269,92 +330,82 @@ class UAZAPI {
         }
     }
 
-    async sendTextMessage(instanceName: string, message: SendTextMessage, tokenOverride?: string): Promise<any> {
-        try {
-            let resp = await this.client.post(`/send/text`, { number: (message as any).number, text: (message as any).text || (message as any).message }, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
+  async sendTextMessage(instanceName: string, message: SendTextMessage, tokenOverride?: string): Promise<any> {
+        const tok = tokenOverride || this.instanceTokens[instanceName] || this.adminToken;
+        const headers: any = { token: tok, Authorization: `Bearer ${tok}`, apikey: this.apiKey, admintoken: this.adminToken };
+        const payload = { number: (message as any).number, text: (message as any).text || (message as any).message, instance: instanceName, access_token: tok } as any;
+        const paths = [
+          `/send/text`,
+          `/send/text/${instanceName}`,
+          `/message/sendText`,
+          `/message/text`,
+          `/api/message/text/${instanceName}`,
+          `/api/message/sendText/${instanceName}`
+        ];
+        for (const p of paths) {
+          try {
+            const resp = await this.client.post(p, payload, { headers });
             return resp.data;
-        } catch (error) {
-            try {
-                const payload = { number: (message as any).number, text: (message as any).text || (message as any).message };
-                let resp = await this.client.post(`/message/sendText`, { ...payload, instance: instanceName }, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-                return resp.data;
-            } catch (e1) {
-                try {
-                    const payload = { number: (message as any).number, text: (message as any).text || (message as any).message };
-                    let resp = await this.client.post(`/api/message/text/${instanceName}`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-                    return resp.data;
-                } catch (e2) {
-                    this.handleError(e2, 'Erro ao enviar texto');
-                }
-            }
+          } catch {}
         }
+        const adminTok = this.adminToken;
+        const adminHeaders: any = { token: adminTok, Authorization: `Bearer ${adminTok}`, apikey: this.apiKey, admintoken: this.adminToken };
+        const adminPayload = { number: (message as any).number, text: (message as any).text || (message as any).message, instance: instanceName, access_token: adminTok } as any;
+        for (const p of paths) {
+          try {
+            const resp = await this.client.post(p, adminPayload, { headers: adminHeaders });
+            return resp.data;
+          } catch {}
+        }
+        this.handleError(new Error('No route matched'), 'Erro ao enviar texto');
     }
 
-    async sendImage(instanceName: string, message: SendMediaMessage, tokenOverride?: string): Promise<any> {
-        try {
-            const payload = { number: (message as any).number, type: 'image', file: (message as any).media || (message as any).url, text: (message as any).caption };
-            let resp = await this.client.post(`/send/media`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-            return resp.data;
-        } catch (error) {
-            // Fallbacks comuns
-            try {
-                const payload = { number: (message as any).number, url: (message as any).media || (message as any).url, caption: (message as any).caption };
-                let resp = await this.client.post(`/message/sendMedia/${instanceName}`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-                return resp.data;
-            } catch (e1) {
-                try {
-                    const payload = { number: (message as any).number, url: (message as any).media || (message as any).url, caption: (message as any).caption, type: 'image' };
-                    let resp = await this.client.post(`/api/message/image/${instanceName}`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-                    return resp.data;
-                } catch (e2) {
-                    this.handleError(e2, 'Erro ao enviar imagem');
-                }
-            }
-        }
+  async sendImage(instanceName: string, message: SendMediaMessage, tokenOverride?: string): Promise<any> {
+        return this.sendMediaGeneric('image', instanceName, message, tokenOverride);
     }
 
-    async sendAudio(instanceName: string, message: SendAudioMessage, tokenOverride?: string): Promise<any> {
-        try {
-            const payload = { number: (message as any).number, type: 'audio', file: (message as any).audio || (message as any).url, text: (message as any).caption };
-            let resp = await this.client.post(`/send/media`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-            return resp.data;
-        } catch (error) {
-            try {
-                const payload = { number: (message as any).number, audio: (message as any).audio || (message as any).url };
-                let resp = await this.client.post(`/message/sendMedia/${instanceName}`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-                return resp.data;
-            } catch (e1) {
-                try {
-                    const payload = { number: (message as any).number, audio: (message as any).audio || (message as any).url };
-                    let resp = await this.client.post(`/api/message/audio/${instanceName}`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-                    return resp.data;
-                } catch (e2) {
-                    this.handleError(e2, 'Erro ao enviar áudio');
-                }
-            }
-        }
+  async sendAudio(instanceName: string, message: SendAudioMessage, tokenOverride?: string): Promise<any> {
+        const kind = message.ptt ? 'ptt' : (message.type || 'audio');
+        return this.sendMediaGeneric(kind, instanceName, { ...message, media: (message as any).audio || (message as any).url }, tokenOverride);
     }
 
-    async sendVideo(instanceName: string, message: SendMediaMessage, tokenOverride?: string): Promise<any> {
-        try {
-            const payload = { number: (message as any).number, type: 'video', file: (message as any).media || (message as any).url, text: (message as any).caption };
-            let resp = await this.client.post(`/send/media`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
+  async sendVideo(instanceName: string, message: SendMediaMessage, tokenOverride?: string): Promise<any> {
+        return this.sendMediaGeneric(message.type || 'video', instanceName, message, tokenOverride);
+    }
+
+    private async sendMediaGeneric(kind: string, instanceName: string, message: any, tokenOverride?: string): Promise<any> {
+        const tok = tokenOverride || this.instanceTokens[instanceName] || this.adminToken;
+        const headers: any = { token: tok, Authorization: `Bearer ${tok}`, apikey: this.apiKey, admintoken: this.adminToken };
+        const payload = {
+          number: (message as any).number,
+          type: kind,
+          file: (message as any).media || (message as any).url || (message as any).file,
+          text: (message as any).caption || (message as any).text,
+          docName: (message as any).docName,
+          instance: instanceName,
+          access_token: tok
+        } as any;
+        const paths = [
+          `/send/media`,
+          `/send/media/${instanceName}`,
+          `/message/sendMedia/${instanceName}`
+        ];
+        for (const p of paths) {
+          try {
+            const resp = await this.client.post(p, payload, { headers });
             return resp.data;
-        } catch (error) {
-            try {
-                const payload = { number: (message as any).number, url: (message as any).media || (message as any).url, caption: (message as any).caption };
-                let resp = await this.client.post(`/message/sendMedia/${instanceName}`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-                return resp.data;
-            } catch (e1) {
-                try {
-                    const payload = { number: (message as any).number, url: (message as any).media || (message as any).url, caption: (message as any).caption, type: 'video' };
-                    let resp = await this.client.post(`/api/message/video/${instanceName}`, payload, { headers: { token: tokenOverride || this.instanceTokens[instanceName] } });
-                    return resp.data;
-                } catch (e2) {
-                    this.handleError(e2, 'Erro ao enviar vídeo');
-                }
-            }
+          } catch {}
         }
+        const adminTok = this.adminToken;
+        const adminHeaders: any = { token: adminTok, Authorization: `Bearer ${adminTok}`, apikey: this.apiKey, admintoken: this.adminToken };
+        const adminPayload = { ...payload, access_token: adminTok };
+        for (const p of paths) {
+          try {
+            const resp = await this.client.post(p, adminPayload, { headers: adminHeaders });
+            return resp.data;
+          } catch {}
+        }
+        this.handleError(new Error('No route matched'), 'Erro ao enviar midia');
     }
 
     private handleError(error: unknown, message: string): never {

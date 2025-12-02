@@ -26,9 +26,12 @@ interface WhatsAppInstance {
   instance_id?: string;
   phone_number: string | null;
   qrcode: string | null;
+  pairing_code?: string | null;
+  pairingCode?: string | null;
   status: 'connected' | 'disconnected' | 'connecting' | 'error';
   created_at: string;
   updated_at: string;
+  has_token?: boolean;
 }
 
 export default function WhatsAppInstances() {
@@ -39,6 +42,9 @@ export default function WhatsAppInstances() {
   const [newPhoneNumber, setNewPhoneNumber] = useState('');
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<WhatsAppInstance | null>(null);
+  const [showConnectedOnly, setShowConnectedOnly] = useState(false);
+  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
   const { toast } = useToast();
 
   // Buscar instâncias
@@ -72,6 +78,27 @@ export default function WhatsAppInstances() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Sincronizar instâncias do provedor (UAZAPI)
+  const syncInstances = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/whatsapp/instances/sync`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (response.ok) {
+        toast({ title: 'Sincronizado', description: 'Instâncias atualizadas do UAZAPI' });
+        fetchInstances();
+      } else {
+        toast({ title: 'Erro', description: data.error || 'Falha ao sincronizar instâncias', variant: 'destructive' });
+      }
+    } catch (error) {
+      console.error('Erro ao sincronizar instâncias:', error);
+      toast({ title: 'Erro', description: 'Erro de conexão ao sincronizar', variant: 'destructive' });
     }
   };
 
@@ -113,9 +140,15 @@ export default function WhatsAppInstances() {
         setNewPhoneNumber('');
         fetchInstances();
         
-        // Se tiver QR Code, mostrar modal
-        if (data.qrcode) {
-          setSelectedInstance(data as WhatsAppInstance);
+        // Abrir modal de pareamento (código ou QR)
+        const pairingCode = data.pairingCode || data.pairing_code || data.code || null;
+        if (data.qrcode || pairingCode) {
+          setSelectedInstance({
+            ...(data as WhatsAppInstance),
+            pairing_code: pairingCode,
+            pairingCode,
+            phone_number: data.phone_number || newPhoneNumber || null
+          });
           setQrModalOpen(true);
         }
       } else {
@@ -137,32 +170,51 @@ export default function WhatsAppInstances() {
     }
   };
 
-  // Obter QR Code
-  const getQRCode = async (instance: WhatsAppInstance) => {
+  // Gerar código de pareamento (e QR se disponível)
+  const getPairingCode = async (instance: WhatsAppInstance) => {
     try {
+      let phone = instance.phone_number || newPhoneNumber;
+      if (!phone) {
+        const promptPhone = window.prompt('Informe o número (E.164) do dispositivo que será pareado:', '');
+        if (!promptPhone) {
+          toast({ title: 'Número obrigatório', description: 'Informe o número do aparelho para gerar o código', variant: 'destructive' });
+          return;
+        }
+        phone = promptPhone;
+      }
+
       const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '/api';
       const instanceId = instance.id;
       const response = await fetch(`${apiBase}/whatsapp/instances/${instanceId}/connect`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone })
       });
       const data = await response.json();
 
       if (response.ok) {
-        setSelectedInstance({...instance, qrcode: data.qrcode});
+        const pairingCode = data.pairingCode || data.pairing_code || data.code || null;
+        setSelectedInstance({
+          ...instance,
+          qrcode: data.qrcode,
+          pairing_code: pairingCode,
+          pairingCode,
+          phone_number: phone || instance.phone_number
+        });
         setQrModalOpen(true);
       } else {
         toast({
           title: 'Erro',
-          description: data.error || 'Erro ao obter QR Code',
+          description: data.error || 'Erro ao obter código de pareamento',
           variant: 'destructive'
         });
       }
     } catch (error) {
-      console.error('Erro ao obter QR Code:', error);
+      console.error('Erro ao obter código de pareamento:', error);
       toast({
         title: 'Erro',
         description: 'Erro de conexão com o servidor',
@@ -208,6 +260,37 @@ export default function WhatsAppInstances() {
         description: 'Erro de conexão com o servidor',
         variant: 'destructive'
       });
+    }
+  };
+
+  const openWebhookModal = (instance: WhatsAppInstance) => {
+    setSelectedInstance(instance);
+    const base = (import.meta.env.VITE_PUBLIC_BASE_URL || '') as string;
+    const defaultUrl = (base && base.trim()) ? `${base.replace(/\/+$/,'')}/api/webhooks/uaz` : `${window.location.origin}/api/webhooks/uaz`;
+    setWebhookUrl(defaultUrl);
+    setWebhookModalOpen(true);
+  };
+
+  const saveWebhook = async () => {
+    if (!selectedInstance) return;
+    try {
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const name = selectedInstance.instance_name || selectedInstance.name;
+      const resp = await fetch(`${apiBase}/whatsapp/instances/${name}/webhook`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl.trim() })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        toast({ title: 'Webhook configurado', description: webhookUrl.trim() });
+        setWebhookModalOpen(false);
+      } else {
+        toast({ title: 'Erro', description: data.error || 'Falha ao configurar webhook', variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'Erro', description: 'Falha ao configurar webhook', variant: 'destructive' });
     }
   };
 
@@ -420,14 +503,29 @@ export default function WhatsAppInstances() {
                 <p className="text-gray-600">Gerencie seus números WhatsApp conectados</p>
               </div>
             </div>
-            <button
-              onClick={fetchInstances}
-              disabled={loading}
-              className="bg-white hover:bg-gray-50 disabled:bg-gray-100 text-gray-700 font-medium py-2 px-4 rounded-xl border border-gray-300 transition-all duration-200 flex items-center space-x-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Atualizar</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowConnectedOnly((v) => !v)}
+                className={`px-4 py-2 rounded-xl border transition-all ${showConnectedOnly ? 'bg-green-600 text-white border-green-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+              >
+                {showConnectedOnly ? 'Somente conectadas' : 'Todas'}
+              </button>
+              <button
+                onClick={fetchInstances}
+                disabled={loading}
+                className="bg-white hover:bg-gray-50 disabled:bg-gray-100 text-gray-700 font-medium py-2 px-4 rounded-xl border border-gray-300 transition-all duration-200 flex items-center space-x-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Atualizar</span>
+              </button>
+              <button
+                onClick={syncInstances}
+                className="bg-gray-700 hover:bg-gray-800 text-white font-medium py-2 px-4 rounded-xl transition-all duration-200 flex items-center space-x-2"
+              >
+                <Wifi className="h-4 w-4" />
+                <span>Sincronizar UAZAPI</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -455,7 +553,7 @@ export default function WhatsAppInstances() {
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {instances.map((instance) => {
+              {(showConnectedOnly ? instances.filter(i => i.status === 'connected') : instances).map((instance) => {
                 const statusInfo = getStatusInfo(instance.status);
                 return (
                   <div key={instance.id} className="group bg-white rounded-2xl border border-gray-200 p-6 hover:border-gray-300 hover:shadow-lg transition-all duration-300">
@@ -472,6 +570,13 @@ export default function WhatsAppInstances() {
                               'Número não definido'
                             }
                           </p>
+                          <div className="mt-1 text-xs">
+                            {instance.has_token ? (
+                              <span className="inline-block px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200 font-bold">Token OK</span>
+                            ) : (
+                              <span className="inline-block px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200 font-bold">Sem token</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className={`px-3 py-1 rounded-full text-xs font-bold border-2 ${statusInfo.badge}`}>
@@ -492,13 +597,20 @@ export default function WhatsAppInstances() {
                       <div className="flex items-center space-x-2">
                         {instance.status !== 'connected' && (
                           <button
-                            onClick={() => getQRCode(instance)}
+                            onClick={() => getPairingCode(instance)}
                             className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-xl transition-all duration-200 flex items-center space-x-2 transform hover:scale-105"
                           >
                             <QrCode className="h-4 w-4" />
-                            <span>QR Code</span>
+                            <span>Parear por código</span>
                           </button>
                         )}
+                        <button
+                          onClick={() => openWebhookModal(instance)}
+                          className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-xl transition-all duration-200 flex items-center space-x-2"
+                        >
+                          <Wifi className="h-4 w-4" />
+                          <span>Webhook</span>
+                        </button>
                         
                         <button
                           onClick={() => deleteInstance(instance)}
@@ -516,7 +628,7 @@ export default function WhatsAppInstances() {
         </div>
       </div>
 
-      {/* Modal de QR Code - Estilo Clean */}
+      {/* Modal de Pareamento - Código e QR */}
       {qrModalOpen && selectedInstance && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-gray-200 max-w-md w-full overflow-hidden">
@@ -527,7 +639,7 @@ export default function WhatsAppInstances() {
                     <QrCode className="h-5 w-5 text-gray-700" />
                   </div>
                   <div>
-                    <h3 className="text-gray-900 font-bold text-lg">QR Code WhatsApp</h3>
+                    <h3 className="text-gray-900 font-bold text-lg">Pareamento WhatsApp</h3>
                     <p className="text-gray-600 text-sm">{selectedInstance.name}</p>
                   </div>
                 </div>
@@ -539,75 +651,108 @@ export default function WhatsAppInstances() {
                 </button>
               </div>
             </div>
-            
-            <div className="p-8">
-              {selectedInstance.qrcode ? (
-                <div className="text-center">
-                  <div className="bg-white p-6 rounded-2xl border border-gray-200 mb-6">
-                    <img 
-                      src={`data:image/png;base64,${selectedInstance.qrcode}`}
-                      alt="QR Code WhatsApp"
-                      className="w-64 h-64 mx-auto rounded-xl"
-                    />
+
+            <div className="p-8 space-y-6">
+              {selectedInstance.pairingCode || selectedInstance.pairing_code ? (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center space-y-3">
+                  <p className="text-sm text-gray-600 font-semibold">Código de pareamento</p>
+                  <div className="text-3xl font-extrabold tracking-widest text-gray-900 bg-white border border-gray-200 rounded-xl py-3">
+                    {selectedInstance.pairingCode || selectedInstance.pairing_code}
                   </div>
-                  <div className="space-y-4">
-                    <p className="text-gray-700 font-medium">
-                      Escaneie este QR Code com seu WhatsApp para conectar a instância.
-                    </p>
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                      <div className="flex items-start space-x-2">
-                        <Info className="h-5 w-5 text-gray-600 mt-0.5" />
-                        <div className="text-sm text-gray-800">
-                          <p className="font-medium mb-1">Como escanear:</p>
-                          <ol className="list-decimal list-inside space-y-1 text-gray-700">
-                            <li>Abra o WhatsApp no seu celular</li>
-                            <li>Toque em "Dispositivos Conectados"</li>
-                            <li>Toque em "Conectar um dispositivo"</li>
-                            <li>Aponte a câmera para o QR Code</li>
-                          </ol>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex space-x-3">
-                      <button
-                        onClick={() => getQRCode(selectedInstance)}
-                        className="flex-1 bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                        <span>Atualizar</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(`data:image/png;base64,${selectedInstance.qrcode}`);
-                          toast({
-                            title: 'Copiado!',
-                            description: 'QR Code copiado para a área de transferência'
-                          });
-                        }}
-                        className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 flex items-center space-x-2"
-                      >
-                        <Copy className="h-4 w-4" />
-                        <span>Copiar</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                    <QrCode className="h-12 w-12 text-gray-400" />
-                  </div>
-                  <h4 className="text-xl font-bold text-gray-900 mb-2">QR Code não disponível</h4>
-                  <p className="text-gray-600 mb-6">Clique no botão abaixo para gerar um novo QR Code.</p>
                   <button
-                    onClick={() => getQRCode(selectedInstance)}
-                    className="bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105"
+                    onClick={() => {
+                      const code = selectedInstance.pairingCode || selectedInstance.pairing_code;
+                      if (code) navigator.clipboard.writeText(String(code));
+                      toast({ title: 'Copiado', description: 'Código copiado para a área de transferência' });
+                    }}
+                    className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white font-bold py-2 px-4 rounded-xl transition-all duration-200"
                   >
-                    <RefreshCw className="h-5 w-5 mr-2 inline" />
-                    Gerar QR Code
+                    <Copy className="h-4 w-4" />
+                    Copiar código
                   </button>
                 </div>
-              )}
+              ) : null}
+
+              {selectedInstance.qrcode ? (
+                <div className="text-center">
+                  <div className="bg-white p-6 rounded-2xl border border-gray-200 mb-4">
+                    <img
+                      src={`data:image/png;base64,${selectedInstance.qrcode}`}
+                      alt="QR Code WhatsApp"
+                      className="w-56 h-56 mx-auto rounded-xl"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-700 mb-4">Se preferir, escaneie o QR Code com o WhatsApp.</p>
+                </div>
+              ) : null}
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <div className="flex items-start space-x-2">
+                  <Info className="h-5 w-5 text-gray-600 mt-0.5" />
+                  <div className="text-sm text-gray-800 space-y-1">
+                    <p className="font-medium">Como parear por código:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-gray-700">
+                      <li>Abra o WhatsApp no celular</li>
+                      <li>Toque em "Dispositivos Conectados"</li>
+                      <li>Escolha "Conectar com código do telefone"</li>
+                      <li>Digite o código acima</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => getPairingCode(selectedInstance)}
+                  className="flex-1 bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Gerar novo código</span>
+                </button>
+                {selectedInstance.qrcode && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`data:image/png;base64,${selectedInstance.qrcode}`);
+                      toast({
+                        title: 'Copiado!',
+                        description: 'QR Code copiado para a área de transferência'
+                      });
+                    }}
+                    className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 flex items-center space-x-2"
+                  >
+                    <Copy className="h-4 w-4" />
+                    <span>Copiar QR</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {webhookModalOpen && selectedInstance && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-gray-200 max-w-md w-full overflow-hidden">
+            <div className="bg-gray-50 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gray-200 rounded-xl flex items-center justify-center">
+                    <Wifi className="h-5 w-5 text-gray-700" />
+                  </div>
+                  <div>
+                    <h3 className="text-gray-900 font-bold text-lg">Configurar Webhook</h3>
+                    <p className="text-gray-600 text-sm">{selectedInstance.name}</p>
+                  </div>
+                </div>
+                <button onClick={()=>setWebhookModalOpen(false)} className="text-gray-500 hover:text-gray-700 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">×</button>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <input value={webhookUrl} onChange={(e)=>setWebhookUrl(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="https://seu-dominio/api/webhooks/uaz" />
+              <div className="flex justify-end gap-2">
+                <button onClick={()=>setWebhookModalOpen(false)} className="px-4 py-2 rounded bg-gray-200 text-gray-800">Cancelar</button>
+                <button onClick={saveWebhook} className="px-4 py-2 rounded bg-gray-700 text-white">Salvar</button>
+              </div>
             </div>
           </div>
         </div>

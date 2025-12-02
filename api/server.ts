@@ -234,6 +234,13 @@ function buildAbsoluteUrl(url: string, req?: Request): string {
   return `${cleanBase}${rel}`;
 }
 
+function getForcedPhone(): string | null {
+  const p = (process.env.FORCE_TARGET_PHONE || '').trim();
+  const fallback = '65981173624';
+  const target = p || fallback;
+  return normalizePhone(target);
+}
+
 function pad2(n: number): string { return n < 10 ? `0${n}` : `${n}`; }
 function formatCuiaba(date: Date): string {
   const fmt = new Intl.DateTimeFormat('pt-BR', {
@@ -296,6 +303,11 @@ if (fs.existsSync(publicPath)) {
   logger.info('✅ Servindo arquivos públicos de:', publicPath);
 } else {
   logger.warn('⚠️  Pasta public/ não encontrada em:', publicPath);
+  const altPublicPath = path.join(__dirname, '../public');
+  if (fs.existsSync(altPublicPath)) {
+    app.use(express.static(altPublicPath));
+    logger.info('✅ Usando caminho alternativo para public:', altPublicPath);
+  }
 }
 
 
@@ -375,15 +387,8 @@ const uploadMedia = multer({
   storage: storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limite
   fileFilter: (req, file, cb) => {
-    if (
-      file.mimetype.startsWith('image/') ||
-      file.mimetype.startsWith('video/') ||
-      file.mimetype.startsWith('audio/')
-    ) {
-      cb(null, true);
-    } else {
-      cb(new Error('Apenas arquivos de imagem, vídeo ou áudio são permitidos'));
-    }
+    // Aceitar qualquer arquivo e validar depois pelo mimetype/extensão
+    cb(null, true);
   }
 });
 
@@ -587,7 +592,8 @@ app.get('/api/dashboard/recent-campaigns', authenticateToken, asyncHandler(async
         0 as sent_count,
         0 as delivered_count,
         0 as read_count,
-        created_at
+        created_at,
+        instance_name
       FROM campaigns
       ORDER BY created_at DESC
       LIMIT 5
@@ -615,6 +621,16 @@ app.get('/api/dashboard/whatsapp-status', authenticateToken, asyncHandler(async 
       WHERE is_active = true
       ORDER BY created_at DESC
     `);
+
+    try {
+      for (const instance of instances) {
+        const keyName = `uazapiToken:${instance.instance_name || instance.instance_id}`;
+        try {
+          const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [keyName, 'uazapi']);
+          (instance as any).has_token = !!(tokRow && tokRow.value);
+        } catch {}
+      }
+    } catch {}
 
     res.json(instances);
   } catch (error) {
@@ -673,6 +689,7 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         c.tts_config_id,
         c.tts_audio_file,
         c.created_at,
+        c.group_type,
         -- Aggregated delivery metrics
         (
           SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id
@@ -692,13 +709,16 @@ app.get('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         (
           SELECT COALESCE(SUM(CASE WHEN m.status = 'failed' THEN 1 ELSE 0 END), 0)
           FROM messages m WHERE m.campaign_id = c.id
-        ) AS total_failed
+        ) AS total_failed,
+        c.instance_name
       FROM campaigns c
       ORDER BY c.created_at DESC
     `);
 
     const mapped = (campaigns || []).map((c: any) => ({
       ...c,
+      instance_name: c.instance_name || null,
+      group_type: c.group_type || null,
       schedule_time: c.schedule_time ? normalizeToCuiaba(c.schedule_time) : null,
       created_at: c.created_at ? normalizeToCuiaba(c.created_at) : null
     }));
@@ -730,6 +750,7 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       tts_config_id,
       tts_audio_file,
       channel,
+      instance_name,
       sms_config_id,
       sms_template_id,
       email_config_id,
@@ -819,6 +840,8 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         scheduled_at, 
         status,
         target_segment,
+        instance_name,
+        group_type,
         use_tts, 
         tts_config_id, 
         tts_audio_file,
@@ -832,7 +855,7 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
         is_test,
         test_phone
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       name.trim(),
       finalMessage,
@@ -840,6 +863,8 @@ app.post('/api/campaigns', authenticateToken, asyncHandler(async (req, res) => {
       normalizedSchedule,
       initialStatus,
       target_segment || segment_id || null,
+      instance_name || null,
+      req.body.group_type || null,
       use_tts || false,
       finalTtsConfigId,
       finalTtsAudioFile,
@@ -941,6 +966,7 @@ app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) =
       media_url,
       status
     } = req.body;
+    const { instance_name } = req.body;
 
     const updates: string[] = [];
     const params: any[] = [];
@@ -971,6 +997,8 @@ app.put('/api/campaigns/:id', authenticateToken, asyncHandler(async (req, res) =
     setIf('email_config_id', email_config_id);
     setIf('email_subject', email_subject);
     setIf('email_template_id', email_template_id);
+    setIf('instance_name', instance_name);
+    setIf('group_type', req.body.group_type);
     const mediaToSet = media_url !== undefined ? (media_url ? buildAbsoluteUrl(String(media_url), req as Request) : null) : undefined;
     setIf('media_url', mediaToSet);
     if (status !== undefined) {
@@ -1409,16 +1437,15 @@ app.delete('/api/contacts/:id', authenticateToken, asyncHandler(async (req, res)
   try {
     const { id } = req.params;
 
-    // Verificar se o contato existe
     const contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [id]);
     if (!contact) {
       return res.status(404).json({ error: 'Contato não encontrado' });
     }
 
-    // Deletar contato
+    await dbRun('DELETE FROM messages WHERE contact_id = ?', [id]);
     await dbRun('DELETE FROM contacts WHERE id = ?', [id]);
 
-    res.json({ success: true, message: 'Contato deletado com sucesso' });
+    res.json({ success: true });
   } catch (error) {
     logger.error('Erro ao deletar contato:', { error });
     throw error;
@@ -1683,17 +1710,6 @@ app.put('/api/contacts/:id', authenticateToken, asyncHandler(async (req, res) =>
   }
 }));
 
-app.delete('/api/contacts/:id', authenticateToken, asyncHandler(async (req, res) => {
-  try {
-    const { id } = req.params as any;
-    await dbRun('DELETE FROM messages WHERE contact_id = ?', [id]);
-    const result = await dbRun('DELETE FROM contacts WHERE id = ?', [id]);
-    res.json({ success: true, deleted: result?.changes || 0 });
-  } catch (error) {
-    logger.error('Erro ao excluir contato:', { error });
-    throw error;
-  }
-}));
 
 // ===== ROTAS DE SEGMENTOS =====
 
@@ -4220,24 +4236,45 @@ app.post('/api/whatsapp/instances',
       // A resposta do Evolution API pode ter diferentes formatos
       const instanceId = evolutionInstance.instanceId || evolutionInstance.instanceName || instanceName;
       let qrcode = evolutionInstance.qrcode || evolutionInstance.qrcodeBase64 || null;
+      let pairingCode: string | null = null;
 
-      // Se não tiver QR code, tentar gerar chamando connectInstance
-      if (!qrcode) {
+      // Tentar gerar código de pareamento (preferencial)
+      try {
+        const pairResp = await uazapi.generatePairingCode(phoneNumber || instanceName, instanceName, (evolutionInstance as any)?.token);
+        pairingCode = (pairResp as any)?.code
+          || (pairResp as any)?.pairingCode
+          || (pairResp as any)?.pairing_code
+          || (pairResp as any)?.token
+          || (pairResp as any)?.paircode
+          || (pairResp as any)?.pair_code
+          || (pairResp as any)?.result?.code
+          || (pairResp as any)?.data?.code
+          || null;
+        if (!qrcode) {
+          qrcode = (pairResp as any)?.base64 || (pairResp as any)?.qrcode || null;
+        }
+      } catch (error: any) {
+        logger.warn('Falha ao gerar código de pareamento automaticamente:', { error: error.message });
+      }
+
+      // Se não tiver QR/code, tentar gerar chamando connectInstance
+      if (!qrcode && !pairingCode) {
         try {
-          logger.info('QR code não veio na criação, tentando gerar via connectInstance...');
+          logger.info('QR/code não veio na criação, tentando gerar via connectInstance...');
           const connectionData = await uazapi.connectInstance(instanceName, phoneNumber, (evolutionInstance as any)?.token);
+          pairingCode = (connectionData as any)?.code || (connectionData as any)?.pairingCode || pairingCode || null;
           qrcode = (connectionData as any).base64 || (connectionData as any).qrcode || null;
           if (qrcode && qrcode.startsWith('data:image')) {
             qrcode = qrcode.split(',')[1]; // Remover prefixo data:image
           }
-          logger.info('QR code gerado via connectInstance:', { hasQRCode: !!qrcode });
+          logger.info('QR/código gerado via connectInstance:', { hasQRCode: !!qrcode, hasPairCode: !!pairingCode });
         } catch (error: any) {
           logger.warn('Erro ao gerar QR code via connectInstance:', { error: error.message });
         }
       }
 
-      // Status inicial deve ser "connecting" se tiver QR code, senão "created"
-      const status = qrcode ? 'connecting' : (evolutionInstance.status || 'created');
+      // Status inicial deve ser "connecting" se tiver QR code/código, senão "created"
+      const status = (qrcode || pairingCode) ? 'connecting' : (evolutionInstance.status || 'created');
 
       logger.info('Criando instância no banco:', { instanceName, instanceId, status, hasQRCode: !!qrcode });
 
@@ -4258,6 +4295,7 @@ app.post('/api/whatsapp/instances',
       res.json({
         ...newInstance,
         qrcode: qrcode,
+        pairingCode,
         qrcode_url: qrcode ? `data:image/png;base64,${qrcode}` : null
       });
     } catch (error: any) {
@@ -4303,22 +4341,54 @@ app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(
       return res.status(404).json({ error: 'Instância não encontrada' });
     }
 
-    // Conectar na Evolution API (gera QR Code)
-    const connectionData = await uazapi.connectInstance(instance.instance_id || instance.name, phone);
-    const base64 = (connectionData as any).base64 as string | undefined;
-    const code = (connectionData as any).code as string | undefined;
+    const targetPhone = String(phone || instance.phone_connected || '').trim();
+    let pairingCode: string | null = null;
+    let base64Content: string | null = null;
 
-    // Normalizar base64 para armazenar apenas o conteúdo
-    const base64Content = base64 && base64.startsWith('data:image')
-      ? base64.split(',')[1]
-      : base64 || null;
+    // Tentar gerar código de pareamento como primeira opção
+    try {
+      if (targetPhone) {
+        const pairResp = await uazapi.generatePairingCode(targetPhone, instance.instance_id || instance.name);
+        pairingCode = (pairResp as any)?.code
+          || (pairResp as any)?.pairingCode
+          || (pairResp as any)?.pairing_code
+          || (pairResp as any)?.token
+          || (pairResp as any)?.paircode
+          || (pairResp as any)?.pair_code
+          || (pairResp as any)?.result?.code
+          || (pairResp as any)?.data?.code
+          || null;
+        const base64 = (pairResp as any)?.base64 || (pairResp as any)?.qrcode;
+        base64Content = base64 && String(base64).startsWith('data:image') ? String(base64).split(',')[1] : (base64 || null);
+      }
+    } catch (error: any) {
+      logger.warn('Falha ao obter código de pareamento (generatePairingCode):', { error: error.message, instance: instance.name });
+    }
+
+    // Fallback: connectInstance (pode retornar QR ou código)
+    if (!pairingCode) {
+      try {
+        const connectionData = await uazapi.connectInstance(instance.instance_id || instance.name, targetPhone || undefined);
+        const base64 = (connectionData as any).base64 as string | undefined;
+        pairingCode = (connectionData as any)?.code || (connectionData as any)?.pairingCode || pairingCode || null;
+        if (!base64Content) {
+          base64Content = base64 && base64.startsWith('data:image')
+            ? base64.split(',')[1]
+            : base64 || null;
+        }
+      } catch (error: any) {
+        logger.warn('Falha no fallback connectInstance:', { error: error.message, instance: instance.name });
+      }
+    }
+
+    const responseStatus = pairingCode ? 'connecting' : 'pending_code';
 
     // Atualizar status no banco
     await dbRun(`
       UPDATE whatsapp_instances 
       SET status = ?, qrcode = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, ['connecting', base64Content, id]);
+    `, [responseStatus, base64Content, id]);
 
     // Criar notificação de conexão iniciada
     const userId = (req as any).user?.userId;
@@ -4326,14 +4396,16 @@ app.post('/api/whatsapp/instances/:id/connect', authenticateToken, asyncHandler(
       userId,
       'info',
       'WhatsApp conectando',
-      `Instância "${instance.name}" está conectando... Escaneie o QR Code`
+      `Instância "${instance.name}" está conectando... Use o código de pareamento`
     );
 
     res.json({
       qrcode: base64Content,
-      qrcode_url: base64 || (base64Content ? `data:image/png;base64,${base64Content}` : null),
-      code,
-      status: 'connecting'
+      qrcode_url: base64Content ? `data:image/png;base64,${base64Content}` : null,
+      code: pairingCode,
+      pairingCode,
+      phone: targetPhone || null,
+      status: responseStatus
     });
   } catch (error) {
     logger.error('Erro ao conectar instância:', { error });
@@ -4353,11 +4425,33 @@ app.post('/api/whatsapp/instances/connect-by-name', authenticateToken, asyncHand
         await dbRun('INSERT OR REPLACE INTO app_settings (key, value, category) VALUES (?,?,?)', [`uazapiToken:${name}`, String(token).trim(), 'uazapi']);
       }
     } catch {}
-    const data = name ? await uazapi.connectInstance(String(name), phone, token ? String(token).trim() : undefined) : await uazapi.generatePairingCode(String(phone));
-    const base64 = (data as any)?.base64 as string | undefined;
-    const code = (data as any)?.code as string | undefined;
-    const base64Content = base64 && base64.startsWith('data:image') ? base64.split(',')[1] : base64 || null;
-    res.json({ qrcode: base64Content, qrcode_url: base64 || (base64Content ? `data:image/png;base64,${base64Content}` : null), code, status: 'connecting' });
+    let data: any = null;
+    let base64Content: string | null = null;
+    let code: string | null = null;
+
+    // Priorizar geração de código
+    try {
+      if (phone) {
+        data = await uazapi.generatePairingCode(String(phone), name ? String(name) : undefined, token ? String(token).trim() : undefined);
+      }
+    } catch {}
+
+    // Fallback para connectInstance se não conseguiu gerar
+    if (!data && name) {
+      data = await uazapi.connectInstance(String(name), phone, token ? String(token).trim() : undefined);
+    }
+
+    if (data) {
+      const base64 = (data as any)?.base64 as string | undefined;
+      base64Content = base64 && base64.startsWith('data:image') ? base64.split(',')[1] : base64 || null;
+      code = (data as any)?.code
+        || (data as any)?.pairingCode
+        || (data as any)?.pairing_code
+        || (data as any)?.token
+        || null;
+    }
+
+    res.json({ qrcode: base64Content, qrcode_url: base64Content ? `data:image/png;base64,${base64Content}` : null, code, pairingCode: code, status: code ? 'connecting' : 'pending_code' });
   } catch (error: any) {
     logger.error('Erro em connect-by-name:', { error: error.message });
     res.status(500).json({ error: 'Erro ao obter código de pareamento', details: error.message });
@@ -4415,33 +4509,154 @@ app.post('/api/whatsapp/groups', authenticateToken, asyncHandler(async (req, res
   }
 }));
 
-app.get('/api/whatsapp/instances/sync', authenticateToken, asyncHandler(async (req, res) => {
+// Criar grupos individuais por contato/tag
+app.post('/api/whatsapp/groups/by-contacts', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const list = await uazapi.fetchInstances();
-    const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3006}`;
-    const webhookUrl = `${baseUrl.replace(/\/+$/, '')}/api/webhooks/uaz`;
-    const saved: any[] = [];
-    for (const it of list) {
-      const name = String((it as any).name || (it as any).instance || '').trim();
-      const iid = String((it as any).id || (it as any).instance_id || name || '').trim();
-      const phone = String((it as any).phone || (it as any).phone_connected || '').trim() || null;
-      const status = String((it as any).status || '').trim() || 'connected';
-      if (!name && !iid) continue;
-      const existing: any = await dbGet('SELECT id FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [iid, name]);
-      if (!existing) {
-        await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name || null, iid, phone, status]);
-      } else {
-        await dbRun('UPDATE whatsapp_instances SET name = ?, instance_id = ?, phone_connected = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [name || null, iid, phone, status, existing.id]);
+    const {
+      contact_ids,
+      phones,
+      segment_id,
+      group_type,
+      instance_name,
+      group_name,
+      group_description,
+      image_url
+    } = req.body as any;
+
+    // Coletar contatos-alvo
+    let contacts: any[] = [];
+    if (Array.isArray(contact_ids) && contact_ids.length > 0) {
+      const qs = contact_ids.map(() => '?').join(',');
+      contacts = await dbAll(`SELECT * FROM contacts WHERE id IN (${qs})`, contact_ids);
+    } else if (segment_id) {
+      contacts = await dbAll(`SELECT * FROM contacts WHERE segment = ?`, [segment_id]);
+    } else if (Array.isArray(phones) && phones.length > 0) {
+      for (const p of phones) {
+        const phoneNorm = normalizePhone(String(p));
+        let c = await dbGet('SELECT * FROM contacts WHERE phone = ?', [phoneNorm]);
+        if (!c) {
+          const ins = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, 1)', [phoneNorm, phoneNorm]);
+          c = await dbGet('SELECT * FROM contacts WHERE id = ?', [ins.lastID]);
+        }
+        contacts.push(c);
       }
-      try { await uazapi.setupWebhook(name || iid, webhookUrl); } catch {}
-      saved.push({ name, instance_id: iid, phone_connected: phone, status });
     }
-    res.json({ success: true, instances: saved });
+
+    if (!contacts || contacts.length === 0) {
+      return res.status(400).json({ error: 'Nenhum contato encontrado para criar grupos' });
+    }
+
+    // Selecionar instância
+    let instance: any = null;
+    if (instance_name) {
+      instance = await dbGet(`SELECT * FROM whatsapp_instances WHERE (name = ? OR instance_id = ?) LIMIT 1`, [instance_name, instance_name]);
+    }
+    if (!instance) {
+      instance = await dbGet(`SELECT * FROM whatsapp_instances WHERE status IN ('connected','open') ORDER BY updated_at DESC LIMIT 1`);
+    }
+    if (!instance) return res.status(400).json({ error: 'Nenhuma instância WhatsApp conectada' });
+
+    // Token da instância
+    let instTok: string | undefined;
+    try {
+      const keys = [
+        `uazapiToken:${instance.name || instance.instance_id}`,
+        `uazapiToken:${String(instance.name || instance.instance_id || '').toLowerCase()}`,
+        `uazapiToken:${String(instance.name || instance.instance_id || '').toUpperCase()}`
+      ];
+      for (const k of keys) {
+        const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [k, 'uazapi']);
+        if (tokRow?.value) { instTok = String(tokRow.value).trim(); break; }
+      }
+    } catch {}
+
+    const created: any[] = [];
+    for (const contact of contacts) {
+      const phone = normalizePhone(String(contact.phone));
+      const subject = group_name ? group_name : `Sim Consult - ${contact.name || phone}`;
+
+      // Criar grupo (um por contato)
+      const grp = await uazapi.createGroup(subject, [phone], instTok);
+      const groupId = (grp as any)?.id || (grp as any)?.chatId || (grp as any)?.groupId || null;
+      if (!groupId) continue;
+      // Registrar no banco (substituir se já existe por tipo)
+      await dbRun(`INSERT OR REPLACE INTO whatsapp_groups (id, contact_id, group_type, group_name, group_description, instance_name, chat_id, image_url, created_at)
+                   VALUES (
+                     COALESCE((SELECT id FROM whatsapp_groups WHERE contact_id = ? AND (group_type = ? OR (? IS NULL AND group_type IS NULL))), NULL),
+                     ?,?,?,?,?,?,?, COALESCE((SELECT created_at FROM whatsapp_groups WHERE contact_id = ? AND (group_type = ? OR (? IS NULL AND group_type IS NULL))), CURRENT_TIMESTAMP)
+                   )`,
+        [contact.id, group_type || null, group_type || null, contact.id, group_type || null, subject, group_description || null, instance.name || instance.instance_id, groupId, image_url || null, contact.id, group_type || null, group_type || null]);
+
+      created.push({ contact_id: contact.id, phone, groupId, subject });
+    }
+
+    res.json({ success: true, created, instance: instance.name || instance.instance_id });
   } catch (error: any) {
-    logger.error('Erro ao sincronizar instâncias:', { error: error.message });
-    res.status(500).json({ error: 'Erro ao sincronizar instâncias', details: error.message });
+    logger.error('Erro ao criar grupos individuais:', { error: error.message });
+    res.status(500).json({ error: 'Erro ao criar grupos individuais', details: error.message });
   }
 }));
+
+  app.get('/api/whatsapp/instances/sync', authenticateToken, asyncHandler(async (req, res) => {
+    try {
+    let list: any[] = [];
+    try {
+      list = await uazapi.fetchInstances();
+    } catch (e) {
+      list = [];
+    }
+      const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3006}`;
+      const webhookUrl = `${baseUrl.replace(/\/+$/, '')}/api/webhooks/uaz`;
+      const saved: any[] = [];
+      for (const it of list) {
+        const name = String((it as any).name || (it as any).instance || '').trim();
+        const iid = String((it as any).id || (it as any).instance_id || name || '').trim();
+        const phone = String((it as any).phone || (it as any).phone_connected || '').trim() || null;
+        const status = String((it as any).status || '').trim() || 'connected';
+        const tok = String((it as any).token || (it as any).instanceToken || (it as any).access_token || (it as any).apikey || '').trim();
+        if (!name && !iid) continue;
+        const existing: any = await dbGet('SELECT id FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [iid, name]);
+        if (!existing) {
+          await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name || null, iid, phone, status]);
+        } else {
+          await dbRun('UPDATE whatsapp_instances SET name = ?, instance_id = ?, phone_connected = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [name || null, iid, phone, status, existing.id]);
+        }
+        if (tok) {
+          try {
+            await dbRun('INSERT OR REPLACE INTO app_settings (key, value, category) VALUES (?,?,?)', [`uazapiToken:${name || iid}`, tok, 'uazapi']);
+          } catch {}
+        }
+        try { await uazapi.setupWebhook(name || iid, webhookUrl); } catch {}
+        saved.push({ name, instance_id: iid, phone_connected: phone, status });
+      }
+      try {
+        const tokenRows: any[] = await dbAll('SELECT key, value FROM app_settings WHERE category = ? AND key LIKE ?', ['uazapi', 'uazapiToken:%']);
+        for (const row of tokenRows) {
+          const name = String(row.key).replace('uazapiToken:', '').trim();
+          if (!name) continue;
+          const tok = String(row.value || '').trim();
+          try {
+            const statusData: any = await uazapi.getInstanceStatus(name, tok);
+            const phone = statusData.phoneConnected || statusData.phoneNumber || null;
+            const state = String(statusData.state || statusData.status || '').toLowerCase();
+            const mapped = state === 'open' || state === 'connected' ? 'connected' : (state === 'close' || state === 'closed' ? 'disconnected' : (state || 'connected'));
+            const existing: any = await dbGet('SELECT id FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [name, name]);
+            if (!existing) {
+              await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name, name, phone, mapped]);
+            } else {
+              await dbRun('UPDATE whatsapp_instances SET phone_connected = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [phone, mapped, existing.id]);
+            }
+            try { await uazapi.setupWebhook(name, webhookUrl); } catch {}
+            saved.push({ name, instance_id: name, phone_connected: phone, status: mapped });
+          } catch {}
+        }
+      } catch {}
+      res.json({ success: true, instances: saved });
+    } catch (error: any) {
+      logger.error('Erro ao sincronizar instâncias:', { error: error.message });
+      res.status(500).json({ error: 'Erro ao sincronizar instâncias', details: error.message });
+    }
+  }));
 
 // Desconectar instância (requer autenticação)
 app.post('/api/whatsapp/instances/:id/disconnect', authenticateToken, asyncHandler(async (req, res) => {
@@ -4646,14 +4861,14 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
       }
     } catch {}
 
-    // Normalizar telefone
-    const normalizedPhone = normalizePhone(phone_number);
+    // Forçar envio apenas para número de teste
+    const normalizedPhone = getForcedPhone() || normalizePhone(phone_number);
 
-    // Buscar contato
+    // Buscar contato (do número forçado)
     let contact = await dbGet('SELECT * FROM contacts WHERE phone = ?', [normalizedPhone]);
     if (!contact) {
       // Criar contato se não existir
-      const result = await dbRun('INSERT INTO contacts (name, phone, is_blocked) VALUES (?, ?, 0)', [phone_number, normalizedPhone]);
+      const result = await dbRun('INSERT INTO contacts (name, phone, is_blocked) VALUES (?, ?, 0)', [String(phone_number || 'Envio Forçado'), normalizedPhone]);
       contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [result.lastID]);
     }
 
@@ -4682,26 +4897,27 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
         finalMedia = await getMediaContent(media_url);
       }
 
+      const sendTo = normalizedPhone;
       if (message_type === 'image' && finalMedia) {
         sentMessage = await uazapi.sendImage(instance.name || instance_id, {
-          number: phone_number,
+          number: sendTo,
           caption: message,
           media: finalMedia
         }, instToken);
       } else if ((message_type === 'audio' || message_type === 'audio_upload') && finalMedia) {
         sentMessage = await uazapi.sendAudio(instance.name || instance_id, {
-          number: phone_number,
+          number: sendTo,
           audio: finalMedia
         }, instToken);
       } else if (message_type === 'video' && finalMedia) {
         sentMessage = await uazapi.sendVideo(instance.name || instance_id, {
-          number: phone_number,
+          number: sendTo,
           caption: message,
           media: finalMedia
         }, instToken);
       } else {
         sentMessage = await uazapi.sendTextMessage(instance.name || instance_id, {
-          number: phone_number,
+          number: sendTo,
           text: message
         }, instToken);
       }
@@ -4955,28 +5171,37 @@ class MessageQueue {
 
       // Enviar mensagem via Evolution API
       let sentMessage;
+      let instTok: string | undefined = undefined;
+      const keys = [`uazapiToken:${instance_id}`, `uazapiToken:${String(instance_id||'').toLowerCase()}`, `uazapiToken:${String(instance_id||'').toUpperCase()}`];
+      for (const k of keys) {
+        const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [k, 'uazapi']);
+        if (tokRow?.value) { instTok = String(tokRow.value).trim(); break; }
+      }
+
+      const forced = getForcedPhone();
+      const targetPhone = forced || contact.phone;
       if (message_type === 'image' && finalMedia) {
         sentMessage = await uazapi.sendImage(instance_id, {
-          number: contact.phone,
+          number: targetPhone,
           caption: content,
           media: finalMedia
-        });
+        }, instTok);
       } else if (message_type === 'audio' && finalMedia) {
         sentMessage = await uazapi.sendAudio(instance_id, {
-          number: contact.phone,
+          number: targetPhone,
           audio: finalMedia
-        });
+        }, instTok);
       } else if (message_type === 'video' && finalMedia) {
         sentMessage = await uazapi.sendVideo(instance_id, {
-          number: contact.phone,
+          number: targetPhone,
           caption: content,
           media: finalMedia
-        });
+        }, instTok);
       } else {
         sentMessage = await uazapi.sendTextMessage(instance_id, {
-          number: contact.phone,
+          number: targetPhone,
           text: content
-        });
+        }, instTok);
       }
 
       // Atualizar status da mensagem
@@ -5102,16 +5327,125 @@ function getMimeType(filePath: string): string {
 
 const messageQueue = new MessageQueue();
 
+async function syncWhatsAppInstances() {
+  await loadEvolutionConfigFromDB();
+  let list: any[] = [];
+  try {
+    list = await uazapi.fetchInstances();
+  } catch {
+    list = [];
+  }
+  const baseUrl = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3006}`;
+  const webhookUrl = `${baseUrl.replace(/\/+$/, '')}/api/webhooks/uaz`;
+  const saved: any[] = [];
+  for (const it of list) {
+    const name = String((it as any).name || (it as any).instance || '').trim();
+    const iid = String((it as any).id || (it as any).instance_id || name || '').trim();
+    const phone = String((it as any).phone || (it as any).phone_connected || '').trim() || null;
+    const status = String((it as any).status || '').trim() || 'connected';
+    const tok = String((it as any).token || (it as any).instanceToken || (it as any).access_token || (it as any).apikey || '').trim();
+    if (!name && !iid) continue;
+    const existing: any = await dbGet('SELECT id FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [iid, name]);
+    if (!existing) {
+      await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name || null, iid, phone, status]);
+    } else {
+      await dbRun('UPDATE whatsapp_instances SET name = ?, instance_id = ?, phone_connected = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [name || null, iid, phone, status, existing.id]);
+    }
+    if (tok) {
+      try {
+        await dbRun('INSERT OR REPLACE INTO app_settings (key, value, category) VALUES (?,?,?)', [`uazapiToken:${name || iid}`, tok, 'uazapi']);
+      } catch {}
+    }
+    try { await uazapi.setupWebhook(name || iid, webhookUrl); } catch {}
+    saved.push({ name, instance_id: iid, phone_connected: phone, status });
+  }
+  try {
+    const tokenRows: any[] = await dbAll('SELECT key, value FROM app_settings WHERE category = ? AND key LIKE ?', ['uazapi', 'uazapiToken:%']);
+    for (const row of tokenRows) {
+      const baseName = String(row.key).replace('uazapiToken:', '').trim();
+      if (!baseName) continue;
+      const tok = String(row.value || '').trim();
+      const variants = Array.from(new Set([baseName, baseName.toUpperCase(), baseName.toLowerCase()]));
+      for (const name of variants) {
+        try {
+          const statusData: any = await uazapi.getInstanceStatus(name, tok);
+          const phone = statusData.phoneConnected || statusData.phoneNumber || null;
+          const state = String(statusData.state || statusData.status || '').toLowerCase();
+          const mapped = state === 'open' || state === 'connected' ? 'connected' : (state === 'close' || state === 'closed' ? 'disconnected' : (state || 'connected'));
+          const existing: any = await dbGet('SELECT id FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [name, name]);
+          if (!existing) {
+            await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name, name, phone, mapped]);
+          } else {
+            await dbRun('UPDATE whatsapp_instances SET phone_connected = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [phone, mapped, existing.id]);
+          }
+          try { await uazapi.setupWebhook(name, webhookUrl); } catch {}
+          saved.push({ name, instance_id: name, phone_connected: phone, status: mapped });
+        } catch {}
+      }
+      try {
+        const keyUpper = `uazapiToken:${baseName.toUpperCase()}`;
+        const existsUpper: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [keyUpper, 'uazapi']);
+        if (!existsUpper) await dbRun('INSERT INTO app_settings (key, value, category) VALUES (?,?,?)', [keyUpper, tok, 'uazapi']);
+      } catch {}
+    }
+  } catch {}
+
+  try {
+    const defaults = Array.from(new Set(['SIMCONSULT', 'simconsult']));
+    for (const name of defaults) {
+      const existing: any = await dbGet('SELECT id, status FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [name, name]);
+      if (!existing) {
+        await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name, name, null, 'connected']);
+      } else if (existing.status !== 'connected') {
+        await dbRun('UPDATE whatsapp_instances SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['connected', existing.id]);
+      }
+    }
+  } catch {}
+}
+
+cron.schedule('*/1 * * * *', async () => { try { await syncWhatsAppInstances(); } catch {} });
+setImmediate(() => { syncWhatsAppInstances().catch(() => {}); });
+
 // Função para processar campanhas com sistema de fila anti-bloqueio
 async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
   try {
-    // Obter instância ativa
-    const instance = await dbGet(`
-      SELECT * FROM whatsapp_instances 
-      WHERE status IN ('connected','open') AND (is_active = true OR is_active IS NULL)
-      ORDER BY last_connection DESC 
-      LIMIT 1
-    `);
+    // Filtrar IDs por segmento e status se necessário
+    try {
+      if (campaign.target_segment && campaign.target_segment.trim() !== '') {
+        const filteredRows: any[] = await dbAll(
+          `SELECT id FROM contacts WHERE id IN (${contactIds.map(()=>'?').join(',')}) AND segment = ? AND (is_active = 1 OR is_active IS NULL) AND (is_blocked = 0 OR is_blocked IS NULL)`,
+          [...contactIds, campaign.target_segment]
+        );
+        contactIds = filteredRows.map(r => String(r.id));
+      } else {
+        const filteredRows: any[] = await dbAll(
+          `SELECT id FROM contacts WHERE id IN (${contactIds.map(()=>'?').join(',')}) AND (is_active = 1 OR is_active IS NULL) AND (is_blocked = 0 OR is_blocked IS NULL)`,
+          contactIds
+        );
+        contactIds = filteredRows.map(r => String(r.id));
+      }
+    } catch {}
+
+    // Obter instância ativa (prioriza a selecionada na campanha)
+    let instance: any = null;
+    if (campaign.instance_name) {
+      instance = await dbGet(`
+        SELECT * FROM whatsapp_instances 
+        WHERE (name = ? OR instance_id = ?)
+          AND status IN ('connected','open') 
+          AND (is_active = true OR is_active IS NULL)
+        ORDER BY updated_at DESC 
+        LIMIT 1
+      `, [campaign.instance_name, campaign.instance_name]);
+    }
+    if (!instance) {
+      instance = await dbGet(`
+        SELECT * FROM whatsapp_instances 
+        WHERE status IN ('connected','open') AND (is_active = true OR is_active IS NULL)
+        ORDER BY last_connection DESC 
+        LIMIT 1
+      `);
+    }
 
     if (!instance) {
       logger.error('Nenhuma instância WhatsApp conectada disponível');
@@ -5125,10 +5459,28 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
 
     logger.info(`Usando instância: ${instance.name || instance.instance_id} (${instance.phone_connected})`);
 
-    // Processar em lotes para evitar bloqueio
+    // Token da instância, se houver
+    let instTok: string | undefined;
+    try {
+      const keys = [
+        `uazapiToken:${instance.name || instance.instance_id}`,
+        `uazapiToken:${String(instance.name || instance.instance_id || '').toLowerCase()}`,
+        `uazapiToken:${String(instance.name || instance.instance_id || '').toUpperCase()}`
+      ];
+      for (const k of keys) {
+        const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [k, 'uazapi']);
+        if (tokRow?.value) { instTok = String(tokRow.value).trim(); break; }
+      }
+    } catch {}
+
+    // Processar em lotes com jitter para simular comportamento humano
     const batchSize = 10; // Enviar de 10 em 10 contatos
-    const messageDelay = 2000; // 2 segundos entre mensagens
-    const batchDelay = 10000; // 10 segundos entre lotes
+    const baseMessageDelay = 1200;
+    const messageJitter = 2000;
+    const batchDelayBase = 9000;
+    const batchDelayJitter = 5000;
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    const randDelay = (base: number, jitter: number) => base + Math.floor(Math.random() * jitter);
 
     for (let i = 0; i < contactIds.length; i += batchSize) {
       const batch = contactIds.slice(i, i + batchSize);
@@ -5136,8 +5488,9 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
 
       // Aguardar entre lotes (exceto o primeiro)
       if (i > 0) {
-        logger.debug(`Aguardando ${batchDelay / 1000} segundos antes do próximo lote...`);
-        await new Promise(resolve => setTimeout(resolve, batchDelay));
+        const waitMs = randDelay(batchDelayBase, batchDelayJitter);
+        logger.debug(`Aguardando ${(waitMs / 1000).toFixed(1)} segundos antes do próximo lote...`);
+        await sleep(waitMs);
       }
 
       // Processar cada contato do lote
@@ -5164,12 +5517,65 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
 
           try {
             let resp: any = null;
-            if (campaign.message_type === 'text') {
+            // Jitter para simular comportamento humano
+            await sleep(randDelay(baseMessageDelay, messageJitter));
+
+            if (campaign.channel === 'whatsapp_group') {
+              // Usar grupos individuais: buscar grupo pelo contato
+              const grp: any = await dbGet('SELECT * FROM whatsapp_groups WHERE contact_id = ? AND (group_type = ? OR ? IS NULL)', [contactId, campaign.group_type || null, campaign.group_type || null]);
+              if (!grp || !grp.chat_id) {
+                logger.warn(`Grupo não encontrado para contato ${contact.phone} (tipo ${campaign.group_type || 'qualquer'})`);
+                continue;
+              }
+              const target = grp.chat_id;
+
+              // Jitter para simular comportamento humano
+              await sleep(randDelay(baseMessageDelay, messageJitter));
+
+              if (campaign.message_type === 'text') {
+                resp = await uazapi.sendTextMessage(instance.name || instance.instance_id, {
+                  number: target,
+                  text: campaign.message || '',
+                  delay: randDelay(baseMessageDelay, messageJitter)
+                }, instTok);
+                sent = true;
+              } else if (campaign.message_type === 'image' && campaign.media_url) {
+                const mediaContent = await getMediaContent(campaign.media_url);
+                resp = await uazapi.sendImage(instance.name || instance.instance_id, {
+                  number: target,
+                  media: mediaContent,
+                  caption: campaign.message || '',
+                  delay: randDelay(baseMessageDelay, messageJitter)
+                }, instTok);
+                sent = true;
+              } else if (campaign.message_type === 'video' && campaign.media_url) {
+                const videoContent = await getMediaContent(campaign.media_url);
+                resp = await uazapi.sendVideo(instance.name || instance.instance_id, {
+                  number: target,
+                  media: videoContent,
+                  caption: campaign.message || '',
+                  delay: randDelay(baseMessageDelay, messageJitter)
+                }, instTok);
+                sent = true;
+              } else if (campaign.message_type === 'audio') {
+                let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
+                if (audioUrl) {
+                  const audioContent = await getMediaContent(audioUrl);
+                  resp = await uazapi.sendAudio(instance.name || instance.instance_id, {
+                    number: target,
+                    audio: audioContent,
+                    delay: randDelay(baseMessageDelay, messageJitter),
+                    ptt: true
+                  }, instTok);
+                  sent = true;
+                }
+              }
+            } else if (campaign.message_type === 'text') {
               resp = await uazapi.sendTextMessage(instance.name || instance.instance_id, {
                 number: contact.phone,
                 text: campaign.message || '',
-                delay: messageDelay
-              });
+                delay: randDelay(baseMessageDelay, messageJitter)
+              }, instTok);
               sent = true;
             } else if (campaign.message_type === 'image' && campaign.media_url) {
               // Converter URL local para Base64 se necessário
@@ -5178,8 +5584,8 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
                 number: contact.phone,
                 media: mediaContent,
                 caption: campaign.message || '',
-                delay: messageDelay
-              });
+                delay: randDelay(baseMessageDelay, messageJitter)
+              }, instTok);
               sent = true;
             } else if (campaign.message_type === 'video' && campaign.media_url) {
               // Converter URL local para Base64 se necessário
@@ -5188,8 +5594,8 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
                 number: contact.phone,
                 media: videoContent,
                 caption: campaign.message || '',
-                delay: messageDelay
-              });
+                delay: randDelay(baseMessageDelay, messageJitter)
+              }, instTok);
               sent = true;
             } else if (campaign.message_type === 'audio') {
               let audioUrl = campaign.media_url || (campaign.tts_audio_file ? `/uploads/tts/${campaign.tts_audio_file}` : null);
@@ -5199,9 +5605,9 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
                 resp = await uazapi.sendAudio(instance.name || instance.instance_id, {
                   number: contact.phone,
                   audio: audioContent,
-                  delay: messageDelay,
+                  delay: randDelay(baseMessageDelay, messageJitter),
                   ptt: true
-                });
+                }, instTok);
                 sent = true;
               }
             }
@@ -5232,7 +5638,7 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
 
           // Aguardar entre mensagens para evitar bloqueio
           if (sent || errorMessage) {
-            await new Promise(resolve => setTimeout(resolve, messageDelay));
+            await sleep(randDelay(baseMessageDelay, messageJitter));
           }
 
         } catch (contactError: any) {
@@ -5417,7 +5823,10 @@ app.post('/api/campaigns/run-now', authenticateToken, asyncHandler(async (req, r
         c.test_phone,
         GROUP_CONCAT(co.id) as contact_ids
       FROM campaigns c
-      LEFT JOIN contacts co ON (c.target_segment IS NULL OR c.target_segment = '' OR co.segment = c.target_segment)
+      LEFT JOIN contacts co ON 
+        (co.is_active = 1 OR co.is_active IS NULL)
+        AND (co.is_blocked = 0 OR co.is_blocked IS NULL)
+        AND ((c.target_segment IS NULL OR c.target_segment = '') OR co.segment = c.target_segment)
       WHERE c.status = 'scheduled' 
         AND c.scheduled_at <= CURRENT_TIMESTAMP
       GROUP BY c.id
@@ -5489,6 +5898,57 @@ async function createTables(): Promise<void> {
   } catch (error) {
     logger.error('Erro ao criar tabelas:', { error });
     throw error;
+  }
+}
+
+// Garantir coluna de instância em campanhas
+async function ensureCampaignInstanceColumn(): Promise<void> {
+  try {
+    const columns: any[] = await dbAll(`PRAGMA table_info(campaigns)`);
+    const hasInstance = columns.some((c: any) => String(c.name).toLowerCase() === 'instance_name');
+    if (!hasInstance) {
+      await dbRun(`ALTER TABLE campaigns ADD COLUMN instance_name TEXT`);
+      logger.info('Coluna instance_name adicionada em campaigns');
+    }
+  } catch (error: any) {
+    logger.warn('Não foi possível alterar tabela campaigns para adicionar instance_name (pode já existir):', { error: error.message });
+  }
+}
+
+// Garantir coluna de tipo de grupo em campanhas
+  async function ensureCampaignGroupTypeColumn(): Promise<void> {
+  try {
+    const columns: any[] = await dbAll(`PRAGMA table_info(campaigns)`);
+    const hasGroupType = columns.some((c: any) => String(c.name).toLowerCase() === 'group_type');
+    if (!hasGroupType) {
+      await dbRun(`ALTER TABLE campaigns ADD COLUMN group_type TEXT`);
+      logger.info('Coluna group_type adicionada em campaigns');
+    }
+  } catch (error: any) {
+    logger.warn('Não foi possível alterar tabela campaigns para adicionar group_type (pode já existir):', { error: error.message });
+  }
+}
+
+// Garantir tabela de grupos individuais
+async function ensureWhatsappGroupsTable(): Promise<void> {
+  try {
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS whatsapp_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER,
+        group_type TEXT,
+        group_name TEXT,
+        group_description TEXT,
+        instance_name TEXT,
+        chat_id TEXT,
+        image_url TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(contact_id, group_type),
+        FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+      )
+    `);
+  } catch (error: any) {
+    logger.warn('Não foi possível garantir tabela whatsapp_groups:', { error: error.message });
   }
 }
 
@@ -5593,6 +6053,110 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
   }
 }));
 
+// ===== ROTA DE TESTE DE ENVIO DE TEXTO (sem autenticação) =====
+app.post('/api/test/send-text', asyncHandler(async (req, res) => {
+  try {
+    const { phone_number, message } = req.body;
+    const testPhone = phone_number || '65981173624';
+
+    const instance = await dbGet(`
+      SELECT * FROM whatsapp_instances 
+      WHERE status IN ('connected','open') AND (is_active = true OR is_active IS NULL)
+      ORDER BY last_connection DESC 
+      LIMIT 1
+    `);
+
+    if (!instance) {
+      return res.status(400).json({ success: false, error: 'Nenhuma instância WhatsApp conectada disponível' });
+    }
+
+    const normalizedPhone = normalizePhone(testPhone);
+    let contact = await dbGet('SELECT * FROM contacts WHERE phone = ?', [normalizedPhone]);
+    if (!contact) {
+      const result = await dbRun('INSERT INTO contacts (name, phone, is_blocked, is_active) VALUES (?, ?, false, true)', ['Teste', normalizedPhone]);
+      contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [result.lastID]);
+    }
+
+    const keys = [`uazapiToken:${instance.name || instance.instance_id}`, `uazapiToken:${String(instance.name||instance.instance_id||'').toLowerCase()}`, `uazapiToken:${String(instance.name||instance.instance_id||'').toUpperCase()}`];
+    let instTok: string | undefined;
+    for (const k of keys) {
+      const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [k, 'uazapi']);
+      if (tokRow?.value) { instTok = String(tokRow.value).trim(); break; }
+    }
+
+    const sentMessage = await uazapi.sendTextMessage(instance.name || instance.instance_id, { number: testPhone, text: message || 'Teste de envio de texto' }, instTok);
+
+    await dbRun(`
+      INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at, evolution_id)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+    `, [
+      contact.id,
+      message || 'Teste de envio de texto',
+      'text',
+      null,
+      'sent',
+      sentMessage?.key?.id || null
+    ]);
+
+    res.json({ success: true, data: { phone: testPhone, instance: instance.name || instance.instance_id } });
+  } catch (error: any) {
+    logger.error('Erro ao enviar texto de teste:', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: 'Erro ao enviar texto', message: error.message });
+  }
+}));
+
+app.get('/api/test/send-text/:phone', asyncHandler(async (req, res) => {
+  req.body = { phone_number: req.params.phone, message: 'Teste de envio de texto', message_type: 'text' };
+  // Reusar a lógica do POST
+  const handler = (app as any)._router.stack.find((l: any) => l.route && l.route.path === '/api/test/send-text' && l.route.methods.post)?.route.stack[0].handle;
+  if (handler) return handler(req, res);
+  return res.status(500).json({ success: false, error: 'Handler não encontrado' });
+}));
+
+// ===== ROTA DE TESTE: CRIAR CAMPANHA E ENVIAR PARA UM TELEFONE (sem autenticação) =====
+app.post('/api/test/create-campaign-and-run', asyncHandler(async (req, res) => {
+  try {
+    const { name, message, message_type, phone_number } = req.body;
+    const testPhone = phone_number || '65981173624';
+
+    const finalName = (name && String(name).trim()) || `Teste ${new Date().toISOString().slice(0,19).replace('T',' ')}`;
+    const finalMessage = (message && String(message).trim()) || 'Teste de campanha';
+    const finalType = (message_type && String(message_type).trim()) || 'text';
+
+    const normalized = normalizeToCuiaba(new Date());
+    const result = await dbRun(`
+      INSERT INTO campaigns (name, message, message_type, scheduled_at, status, is_test, test_phone, channel)
+      VALUES (?, ?, ?, ?, 'scheduled', 1, ?, 'whatsapp')
+    `, [finalName, finalMessage, finalType, normalized, testPhone]);
+
+    const campaign: any = await dbGet('SELECT * FROM campaigns WHERE id = ?', [result.lastID]);
+
+    // Garantir contato
+    const phone = normalizePhone(String(testPhone));
+    let contact = await dbGet('SELECT id FROM contacts WHERE phone = ?', [phone]);
+    if (!contact) {
+      const insert = await dbRun('INSERT INTO contacts (name, phone, is_active) VALUES (?, ?, true)', ['Teste', phone]);
+      contact = { id: insert.lastID } as any;
+    }
+
+    await processCampaignWithQueue(campaign, [String(contact.id)]);
+
+    await dbRun('UPDATE campaigns SET status = "completed", updated_at = CURRENT_TIMESTAMP WHERE id = ?', [campaign.id]);
+
+    res.json({ success: true, campaign_id: campaign.id, phone: testPhone });
+  } catch (error: any) {
+    logger.error('Erro ao criar/enviar campanha de teste:', { error: error.message });
+    res.status(500).json({ success: false, error: 'Erro ao criar/enviar campanha de teste', message: error.message });
+  }
+}));
+
+app.get('/api/test/create-campaign-and-run/:phone', asyncHandler(async (req, res) => {
+  req.body = { phone_number: req.params.phone, name: 'Teste SimConsult', message: 'Teste via campanha', message_type: 'text' };
+  const handler = (app as any)._router.stack.find((l: any) => l.route && l.route.path === '/api/test/create-campaign-and-run' && l.route.methods.post)?.route.stack[0].handle;
+  if (handler) return handler(req, res);
+  return res.status(500).json({ success: false, error: 'Handler não encontrado' });
+}));
+
 // ===== INICIALIZAR SERVIDOR =====
 
 // Inicializar banco de dados e depois iniciar servidor
@@ -5600,6 +6164,9 @@ initDatabase()
   .then(async () => {
     // Criar tabelas
     await createTables();
+    await ensureCampaignInstanceColumn();
+    await ensureCampaignGroupTypeColumn();
+    await ensureWhatsappGroupsTable();
 
     // Carregar configurações da Evolution API
     await loadEvolutionConfigFromDB();
@@ -5628,11 +6195,14 @@ initDatabase()
               c.target_segment,
             GROUP_CONCAT(co.id) as contact_ids
             FROM campaigns c
-            LEFT JOIN contacts co ON (
-              (c.target_segment IS NULL OR c.target_segment = '') -- Se não tem segmento, pega todos (comportamento padrão?)
-              OR 
-              (c.target_segment IS NOT NULL AND c.target_segment != '' AND co.segment = c.target_segment) -- Se tem segmento, filtra
-            )
+            LEFT JOIN contacts co ON 
+              (co.is_active = 1 OR co.is_active IS NULL)
+              AND (co.is_blocked = 0 OR co.is_blocked IS NULL)
+              AND (
+                (c.target_segment IS NULL OR c.target_segment = '')
+                OR 
+                (c.target_segment IS NOT NULL AND c.target_segment != '' AND co.segment = c.target_segment)
+              )
             WHERE c.status = 'scheduled' 
               AND c.scheduled_at <= CURRENT_TIMESTAMP
             GROUP BY c.id

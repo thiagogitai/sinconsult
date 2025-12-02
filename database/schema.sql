@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
   scheduled_at DATETIME,
   status TEXT DEFAULT 'draft',
   target_segment TEXT,
+  instance_name TEXT,
   created_by INTEGER,
   is_active INTEGER DEFAULT 1,
   use_tts INTEGER DEFAULT 0,
