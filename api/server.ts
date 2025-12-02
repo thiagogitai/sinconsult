@@ -4615,7 +4615,11 @@ app.post('/api/whatsapp/groups/by-contacts', authenticateToken, asyncHandler(asy
         const status = String((it as any).status || '').trim() || 'connected';
         const tok = String((it as any).token || (it as any).instanceToken || (it as any).access_token || (it as any).apikey || '').trim();
         if (!name && !iid) continue;
-        const existing: any = await dbGet('SELECT id FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [iid, name]);
+        const existing: any = await dbGet('SELECT id, is_active FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [iid, name]);
+        // Se localmente marcada inativa, não reativar ao sincronizar
+        if (existing && existing.is_active === 0) {
+          continue;
+        }
         if (!existing) {
           await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name || null, iid, phone, status]);
         } else {
@@ -4640,7 +4644,10 @@ app.post('/api/whatsapp/groups/by-contacts', authenticateToken, asyncHandler(asy
             const phone = statusData.phoneConnected || statusData.phoneNumber || null;
             const state = String(statusData.state || statusData.status || '').toLowerCase();
             const mapped = state === 'open' || state === 'connected' ? 'connected' : (state === 'close' || state === 'closed' ? 'disconnected' : (state || 'connected'));
-            const existing: any = await dbGet('SELECT id FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [name, name]);
+            const existing: any = await dbGet('SELECT id, is_active FROM whatsapp_instances WHERE instance_id = ? OR name = ? ORDER BY id DESC', [name, name]);
+            if (existing && existing.is_active === 0) {
+              continue;
+            }
             if (!existing) {
               await dbRun('INSERT INTO whatsapp_instances (name, instance_id, phone_connected, status, is_active) VALUES (?, ?, ?, ?, 1)', [name, name, phone, mapped]);
             } else {
@@ -4706,10 +4713,14 @@ app.delete('/api/whatsapp/instances/:id', authenticateToken, asyncHandler(async 
       }
     }
 
-    // Deletar do banco
-    await dbRun('DELETE FROM whatsapp_instances WHERE id = ?', [id]);
+    // Em vez de remover, marcar como inativa para não voltar no sync
+    await dbRun(`
+      UPDATE whatsapp_instances 
+      SET is_active = 0, status = 'disconnected', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [id]);
 
-    res.json({ success: true, message: 'Instância deletada com sucesso' });
+    res.json({ success: true, message: 'Instância removida da listagem (inativa)' });
   } catch (error) {
     logger.error('Erro ao deletar instância:', { error });
     throw error;
