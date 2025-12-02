@@ -356,12 +356,11 @@ const Contacts: React.FC = () => {
 
   const handleExportExcel = () => {
     const csvContent = [
-      ['Nome', 'Telefone', 'Email', 'Tags', 'Status'],
+      ['Nome', 'Telefone', 'Tags', 'Status'],
       ...contacts.map(contact => [
         contact.name,
         contact.phone,
-        contact.email || '',
-        contact.tags ? contact.tags.join(', ') : '',
+        contact.tags ? (Array.isArray(contact.tags) ? contact.tags.join(', ') : contact.tags) : '',
         contact.status === 'active' ? 'Ativo' : 'Cancelado'
       ])
     ].map(row => row.join(',')).join('\n');
@@ -463,40 +462,7 @@ const Contacts: React.FC = () => {
               <UserPlus className="h-4 w-4 sm:h-5 sm:w-5" />
               <span>Adicionar</span>
             </button>
-            <button
-              onClick={() => setSendModalOpen(true)}
-              className="bg-indigo-600 text-white hover:bg-indigo-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
-              disabled={selectedContacts.size === 0}
-            >
-              <span>Enviar Mensagem</span>
-            </button>
-            <button
-              onClick={() => setGroupModalOpen(true)}
-              className="bg-purple-600 text-white hover:bg-purple-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
-              disabled={selectedContacts.size === 0}
-            >
-              <span>Criar Grupo</span>
-            </button>
-            <button
-              onClick={() => setInstanceModalOpen(true)}
-              className="bg-gray-800 text-white hover:bg-black px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
-            >
-              <span>Cadastrar Instância</span>
-            </button>
-            <button
-              onClick={async()=>{
-                try {
-                  const token = localStorage.getItem('token');
-                  if (!token) { toast({ title:'Erro', description:'Autenticação necessária', variant:'destructive' }); return; }
-                  const resp = await fetch('/api/whatsapp/instances/sync', { headers:{ 'Authorization':`Bearer ${token}` } });
-                  const data = await resp.json();
-                  if (resp.ok) { toast({ title:'Instâncias sincronizadas', description: `${(data.instances||[]).length} instância(s)` }); } else { toast({ title:'Erro', description: data.error || 'Falha ao sincronizar', variant:'destructive' }); }
-                } catch { toast({ title:'Erro', description:'Falha ao sincronizar', variant:'destructive' }); }
-              }}
-              className="bg-gray-600 text-white hover:bg-gray-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-semibold shadow-lg text-sm sm:text-base"
-            >
-              <span>Sincronizar Instâncias</span>
-            </button>
+            {/* Ações ocultadas conforme solicitado */}
           </div>
         </div>
       </div>
@@ -527,18 +493,7 @@ const Contacts: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-300">
-          <div className="flex items-center justify-between mb-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Com Email</p>
-              <p className="text-2xl font-bold text-gray-900">{contacts.filter(c => c.email).length}</p>
-              <p className="text-xs text-gray-500">Com email cadastrado</p>
-            </div>
-            <div className="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center">
-              <Mail className="h-6 w-6 text-white" />
-            </div>
-          </div>
-        </div>
+        {/* Removido card de Email */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-300">
           <div className="flex items-center justify-between mb-4">
             <div className="space-y-1">
