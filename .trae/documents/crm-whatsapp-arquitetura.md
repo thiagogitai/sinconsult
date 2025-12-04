@@ -7,17 +7,19 @@ POST /api/tts/config
 ```
 
 Request:
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| campaign_id | string | true | ID da campanha |
-| provider | string | true | Provedor TTS (google/amazon/azure) |
-| voice_id | string | true | ID da voz (ex: pt-BR-Wavenet-A) |
-| language_code | string | true | Código do idioma (ex: pt-BR) |
-| speaking_rate | number | false | Velocidade (0.25-4.0, default: 1.0) |
-| pitch | number | false | Tom (-20.0 a +20.0, default: 0.0) |
-| volume | number | false | Volume (-96.0 a +16.0, default: 0.0) |
+
+| Parâmetro      | Tipo   | Obrigatório | Descrição                            |
+| -------------- | ------ | ----------- | ------------------------------------ |
+| campaign\_id   | string | true        | ID da campanha                       |
+| provider       | string | true        | Provedor TTS (google/amazon/azure)   |
+| voice\_id      | string | true        | ID da voz (ex: pt-BR-Wavenet-A)      |
+| language\_code | string | true        | Código do idioma (ex: pt-BR)         |
+| speaking\_rate | number | false       | Velocidade (0.25-4.0, default: 1.0)  |
+| pitch          | number | false       | Tom (-20.0 a +20.0, default: 0.0)    |
+| volume         | number | false       | Volume (-96.0 a +16.0, default: 0.0) |
 
 Response:
+
 ```json
 {
   "id": "uuid",
@@ -36,12 +38,14 @@ POST /api/tts/generate
 ```
 
 Request:
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| text | string | true | Texto para converter em áudio |
-| config_id | string | true | ID da configuração TTS |
+
+| Parâmetro  | Tipo   | Obrigatório | Descrição                     |
+| ---------- | ------ | ----------- | ----------------------------- |
+| text       | string | true        | Texto para converter em áudio |
+| config\_id | string | true        | ID da configuração TTS        |
 
 Response:
+
 ```json
 {
   "audio_url": "/api/tts/audio/uuid.mp3",
@@ -56,7 +60,8 @@ GET /api/tts/metrics/:campaign_id
 ```
 
 Response:
-```json
+
+````json
 {
   "campaign_id": "uuid",
   "total_characters": 50000,
@@ -103,23 +108,32 @@ graph TD
     
     E --> G[WhatsApp Web]
     G --> H[Dispositivos WhatsApp]
-```
+````
 
 ## 2. Descrição das Tecnologias
 
-- **Frontend**: React@18 + TypeScript + Vite + Tailwind CSS
-- **Backend**: Express@4 + TypeScript + Node.js@18
-- **Database**: PostgreSQL@15 com conexão local
-- **Cache**: Redis para sessões e filas de processamento
-- **API Integration**: Evolution API v2 para WhatsApp
-- **TTS Integration**: Google Cloud TTS, Amazon Polly, Azure TTS
-- **File Storage**: Sistema de arquivos local para mídias e áudios TTS
-- **Authentication**: JWT com bcrypt para hash de senhas
-- **ORM**: pg ou node-postgres para queries SQL
+* **Frontend**: React\@18 + TypeScript + Vite + Tailwind CSS
+
+* **Backend**: Express\@4 + TypeScript + Node.js\@18
+
+* **Database**: PostgreSQL\@15 com conexão local
+
+* **Cache**: Redis para sessões e filas de processamento
+
+* **API Integration**: Evolution API v2 para WhatsApp
+
+* **TTS Integration**: Google Cloud TTS, Amazon Polly, Azure TTS
+
+* **File Storage**: Sistema de arquivos local para mídias e áudios TTS
+
+* **Authentication**: JWT com bcrypt para hash de senhas
+
+* **ORM**: pg ou node-postgres para queries SQL
 
 ## 2.1 Configuração do PostgreSQL Local
 
 ### Instalação
+
 ```bash
 # Windows (usando Chocolatey)
 choco install postgresql
@@ -132,6 +146,7 @@ sudo apt-get install postgresql postgresql-contrib
 ```
 
 ### Configuração Inicial
+
 ```bash
 # Iniciar serviço PostgreSQL
 sudo systemctl start postgresql
@@ -145,6 +160,7 @@ sudo -u postgres psql
 ```
 
 ### Variáveis de Ambiente
+
 ```bash
 # .env file
 DB_HOST=localhost
@@ -158,19 +174,19 @@ DB_POOL_SIZE=20
 
 ## 3. Definições de Rotas
 
-| Rota | Propósito |
-|------|-----------|
-| / | Dashboard principal com métricas |
-| /login | Página de autenticação do usuário |
-| /contacts | Gerenciamento de contatos e importação |
-| /campaigns | Criação e gerenciamento de campanhas |
-| /campaigns/new | Formulário de nova campanha |
-| /campaigns/:id | Detalhes e métricas da campanha |
-| /instances | Gerenciamento de instâncias WhatsApp |
-| /instances/:id/qr | Exibição do QR Code para conexão |
-| /metrics | Relatórios e análises detalhadas |
-| /settings | Configurações do sistema e integrações |
-| /api/* | Rotas da API REST (documentadas abaixo) |
+| Rota              | Propósito                               |
+| ----------------- | --------------------------------------- |
+| /                 | Dashboard principal com métricas        |
+| /login            | Página de autenticação do usuário       |
+| /contacts         | Gerenciamento de contatos e importação  |
+| /campaigns        | Criação e gerenciamento de campanhas    |
+| /campaigns/new    | Formulário de nova campanha             |
+| /campaigns/:id    | Detalhes e métricas da campanha         |
+| /instances        | Gerenciamento de instâncias WhatsApp    |
+| /instances/:id/qr | Exibição do QR Code para conexão        |
+| /metrics          | Relatórios e análises detalhadas        |
+| /settings         | Configurações do sistema e integrações  |
+| /api/\*           | Rotas da API REST (documentadas abaixo) |
 
 ## 4. Definições de API
 
@@ -181,12 +197,14 @@ POST /api/auth/login
 ```
 
 Request:
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| email | string | true | Email do usuário |
-| password | string | true | Senha do usuário |
+
+| Parâmetro | Tipo   | Obrigatório | Descrição        |
+| --------- | ------ | ----------- | ---------------- |
+| email     | string | true        | Email do usuário |
+| password  | string | true        | Senha do usuário |
 
 Response:
+
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -206,14 +224,16 @@ GET /api/contacts
 ```
 
 Query Parameters:
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| page | number | false | Página atual (default: 1) |
-| limit | number | false | Itens por página (default: 50) |
-| search | string | false | Busca por nome ou telefone |
-| group_id | string | false | Filtrar por grupo |
+
+| Parâmetro | Tipo   | Obrigatório | Descrição                      |
+| --------- | ------ | ----------- | ------------------------------ |
+| page      | number | false       | Página atual (default: 1)      |
+| limit     | number | false       | Itens por página (default: 50) |
+| search    | string | false       | Busca por nome ou telefone     |
+| group\_id | string | false       | Filtrar por grupo              |
 
 Response:
+
 ```json
 {
   "data": [
@@ -237,10 +257,11 @@ POST /api/contacts/import
 ```
 
 Request (multipart/form-data):
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| file | File | true | Arquivo Excel/CSV |
-| group_id | string | false | ID do grupo para importar |
+
+| Parâmetro | Tipo   | Obrigatório | Descrição                 |
+| --------- | ------ | ----------- | ------------------------- |
+| file      | File   | true        | Arquivo Excel/CSV         |
+| group\_id | string | false       | ID do grupo para importar |
 
 ### 4.3 Campanhas
 
@@ -249,16 +270,18 @@ POST /api/campaigns
 ```
 
 Request:
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| name | string | true | Nome da campanha |
-| message | string | true | Mensagem a ser enviada |
-| contact_list_id | string | true | ID da lista de contatos |
-| media_url | string | false | URL da mídia anexada |
-| scheduled_at | string | false | Data/hora para agendamento (ISO 8601) |
-| instance_id | string | true | ID da instância WhatsApp |
+
+| Parâmetro         | Tipo   | Obrigatório | Descrição                             |
+| ----------------- | ------ | ----------- | ------------------------------------- |
+| name              | string | true        | Nome da campanha                      |
+| message           | string | true        | Mensagem a ser enviada                |
+| contact\_list\_id | string | true        | ID da lista de contatos               |
+| media\_url        | string | false       | URL da mídia anexada                  |
+| scheduled\_at     | string | false       | Data/hora para agendamento (ISO 8601) |
+| instance\_id      | string | true        | ID da instância WhatsApp              |
 
 Response:
+
 ```json
 {
   "id": "uuid",
@@ -275,10 +298,11 @@ POST /api/instances
 ```
 
 Request:
-| Parâmetro | Tipo | Obrigatório | Descrição |
-|-----------|------|-------------|-----------|
-| name | string | true | Nome da instância |
-| description | string | false | Descrição da instância |
+
+| Parâmetro   | Tipo   | Obrigatório | Descrição              |
+| ----------- | ------ | ----------- | ---------------------- |
+| name        | string | true        | Nome da instância      |
+| description | string | false       | Descrição da instância |
 
 ```
 
@@ -286,6 +310,7 @@ GET /api/instances/:id/qr
 ```
 
 Response:
+
 ```json
 {
   "qr_code": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
@@ -301,6 +326,7 @@ GET /api/metrics/campaigns/:id
 ```
 
 Response:
+
 ```json
 {
   "campaign_id": "uuid",
@@ -584,6 +610,7 @@ erDiagram
 ### 6.2 Definições DDL
 
 **Script de Criação Completo do Banco**
+
 ```sql
 -- Ativar extensões necessárias
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -851,6 +878,7 @@ CREATE TRIGGER update_tts_configs_updated_at BEFORE UPDATE ON tts_configs
 ```
 
 **Script de Dados Iniciais**
+
 ```sql
 -- Criar usuário admin padrão (senha: admin123)
 INSERT INTO users (email, password_hash, name, role) VALUES (
@@ -1040,52 +1068,76 @@ class MessageQueue {
 
 ### 8.1 Medidas de Segurança
 
-- **Autenticação JWT**: Tokens com expiração de 24h
-- **Rate Limiting**: Limite de 100 requisições por minuto por IP
-- **Validação de Dados**: Validação rigorosa de entrada de dados
-- **Criptografia**: Senhas hasheadas com bcrypt (salt rounds: 12)
-- **CORS**: Configurado apenas para origens permitidas
-- **Helmet**: Headers de segurança adicionados
-- **SQL Injection**: Proteção através de queries parametrizadas
-- **Database Security**: Conexão local sem exposição externa
+* **Autenticação JWT**: Tokens com expiração de 24h
+
+* **Rate Limiting**: Limite de 100 requisições por minuto por IP
+
+* **Validação de Dados**: Validação rigorosa de entrada de dados
+
+* **Criptografia**: Senhas hasheadas com bcrypt (salt rounds: 12)
+
+* **CORS**: Configurado apenas para origens permitidas
+
+* **Helmet**: Headers de segurança adicionados
+
+* **SQL Injection**: Proteção através de queries parametrizadas
+
+* **Database Security**: Conexão local sem exposição externa
 
 ### 8.2 Otimizações de Performance
 
-- **Paginação**: Limite de 50 registros por página
-- **Índices de Banco**: Índices otimizados para queries frequentes
-- **Cache Redis**: Cache de sessões e dados frequentes
-- **Lazy Loading**: Carregamento sob demanda de componentes
-- **Connection Pool**: Pool de conexões com banco de dados (mínimo 20 conexões)
-- **Batch Processing**: Processamento de mensagens em lotes de 50-100
-- **Para 1000 usuários**: 
-  - Pool de conexões aumentado para 50-100
-  - Índices adicionais em messages(campaign_id, status, created_at)
-  - Particionamento de tabelas de mensagens por mês
-  - Cache Redis com 1GB para filas de processamento
-  - Cache de áudios TTS com 10-50GB
+* **Paginação**: Limite de 50 registros por página
+
+* **Índices de Banco**: Índices otimizados para queries frequentes
+
+* **Cache Redis**: Cache de sessões e dados frequentes
+
+* **Lazy Loading**: Carregamento sob demanda de componentes
+
+* **Connection Pool**: Pool de conexões com banco de dados (mínimo 20 conexões)
+
+* **Batch Processing**: Processamento de mensagens em lotes de 50-100
+
+* **Para 1000 usuários**:
+
+  * Pool de conexões aumentado para 50-100
+
+  * Índices adicionais em messages(campaign\_id, status, created\_at)
+
+  * Particionamento de tabelas de mensagens por mês
+
+  * Cache Redis com 1GB para filas de processamento
+
+  * Cache de áudios TTS com 10-50GB
 
 ### 8.3 Escalabilidade
 
-- **Arquitetura Horizontal**: Múltiplas instâncias do backend
-- **Load Balancer**: Distribuição de carga entre instâncias
-- **Database Sharding**: Particionamento de dados por usuário
-- **Message Queue**: Fila de processamento assíncrono
-- **CDN**: Assets estáticos servidos via CDN
+* **Arquitetura Horizontal**: Múltiplas instâncias do backend
+
+* **Load Balancer**: Distribuição de carga entre instâncias
+
+* **Database Sharding**: Particionamento de dados por usuário
+
+* **Message Queue**: Fila de processamento assíncrono
+
+* **CDN**: Assets estáticos servidos via CDN
 
 ### 8.4 Configurações para 1000 Usuários
 
 **Requisitos de Hardware**:
-| Componente | Especificação Mínima | Recomendado |
-|------------|----------------------|-------------|
-| CPU | 8 cores @ 2.4GHz | 16 cores @ 3.0GHz |
-| RAM | 16GB | 32GB |
-| Storage | 500GB SSD NVMe | 1TB SSD NVMe |
-| Network | 1Gbps | 10Gbps |
-| PostgreSQL | 4GB RAM dedicado | 8GB RAM dedicado |
-| Redis | 1GB | 2GB |
-| TTS Cache | 10GB SSD | 50GB SSD |
+
+| Componente | Especificação Mínima | Recomendado       |
+| ---------- | -------------------- | ----------------- |
+| CPU        | 8 cores @ 2.4GHz     | 16 cores @ 3.0GHz |
+| RAM        | 16GB                 | 32GB              |
+| Storage    | 500GB SSD NVMe       | 1TB SSD NVMe      |
+| Network    | 1Gbps                | 10Gbps            |
+| PostgreSQL | 4GB RAM dedicado     | 8GB RAM dedicado  |
+| Redis      | 1GB                  | 2GB               |
+| TTS Cache  | 10GB SSD             | 50GB SSD          |
 
 **Configurações de Banco de Dados**:
+
 ```sql
 -- Aumentar work_mem para queries complexas
 ALTER SYSTEM SET work_mem = '256MB';
@@ -1105,6 +1157,7 @@ ALTER SYSTEM SET autovacuum_analyze_scale_factor = 0.05;
 ```
 
 **Pool de Conexões Otimizado**:
+
 ```typescript
 export const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
@@ -1122,6 +1175,7 @@ export const pool = new Pool({
 ```
 
 **Sistema de Filas para 1000 Usuários**:
+
 ```typescript
 // Configuração do sistema de filas para processamento gradual
 class CampaignQueue {
@@ -1167,6 +1221,7 @@ class CampaignQueue {
 ```
 
 **Monitoramento de Performance**:
+
 ```typescript
 // Sistema de monitoramento para 700 usuários
 class PerformanceMonitor {
@@ -1209,33 +1264,48 @@ class PerformanceMonitor {
 ```
 
 **Capacidade de Armazenamento Estimada**:
-| Recurso | Tamanho por Registro | Volume Mensal | Total Mensal |
-|---------|---------------------|---------------|--------------|
-| Contatos | 2KB | 1.000 | 2MB |
-| Mensagens | 5KB | 60.000 | 300MB |
-| Logs de Atividade | 1KB | 100.000 | 100MB |
-| Arquivos de Mídia | 500KB (média) | 300 | 150MB |
-| Áudios TTS | 200KB (média) | 18.000 (30% únicos) | 3.6GB |
-| Cache TTS | 200KB (média) | 42.000 reutilizações | 8.4GB |
-| **Total Estimado** | - | - | **~12.4GB/mês** |
+
+| Recurso            | Tamanho por Registro | Volume Mensal        | Total Mensal     |
+| ------------------ | -------------------- | -------------------- | ---------------- |
+| Contatos           | 2KB                  | 1.000                | 2MB              |
+| Mensagens          | 5KB                  | 60.000               | 300MB            |
+| Logs de Atividade  | 1KB                  | 100.000              | 100MB            |
+| Arquivos de Mídia  | 500KB (média)        | 300                  | 150MB            |
+| Áudios TTS         | 200KB (média)        | 18.000 (30% únicos)  | 3.6GB            |
+| Cache TTS          | 200KB (média)        | 42.000 reutilizações | 8.4GB            |
+| **Total Estimado** | -                    | -                    | **\~12.4GB/mês** |
 
 **Otimização de Armazenamento TTS**:
-- **Cache de 70%**: Reutilização de áudios iguais reduz em 70% os custos
-- **Compressão**: Arquivos MP3 comprimidos a 128kbps
-- **TTL de 30 dias**: Áudios antigos são removidos automaticamente
-- **Armazenamento em nuvem**: Opção para S3/Google Cloud Storage
-- **Dedupicação**: Mesmo texto + configuração = mesmo arquivo
+
+* **Cache de 70%**: Reutilização de áudios iguais reduz em 70% os custos
+
+* **Compressão**: Arquivos MP3 comprimidos a 128kbps
+
+* **TTL de 30 dias**: Áudios antigos são removidos automaticamente
+
+* **Armazenamento em nuvem**: Opção para S3/Google Cloud Storage
+
+* **Dedupicação**: Mesmo texto + configuração = mesmo arquivo
 
 **Alertas e Notificações**:
-- Taxa de entrega < 95%
-- Tempo de processamento > 5 segundos/mensagem
-- Erros de conexão > 3% das tentativas
-- Fila de processamento > 1000 mensagens pendentes
-- Uso de CPU > 80% por mais de 5 minutos
-- Uso de memória > 85%
-- Espaço em disco < 20%
-- Custo TTS > $50/mês
-- Cache hit rate < 60%
+
+* Taxa de entrega < 95%
+
+* Tempo de processamento > 5 segundos/mensagem
+
+* Erros de conexão > 3% das tentativas
+
+* Fila de processamento > 1000 mensagens pendentes
+
+* Uso de CPU > 80% por mais de 5 minutos
+
+* Uso de memória > 85%
+
+* Espaço em disco < 20%
+
+* Custo TTS > $50/mês
+
+* Cache hit rate < 60%
 
 ### 8.5 Integração TTS Exemplo
 
@@ -1331,3 +1401,4 @@ class TTSCacheService {
   }
 }
 ```
+

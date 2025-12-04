@@ -333,14 +333,27 @@ class UAZAPI {
   async sendTextMessage(instanceName: string, message: SendTextMessage, tokenOverride?: string): Promise<any> {
         const tok = tokenOverride || this.instanceTokens[instanceName] || this.adminToken;
         const headers: any = { token: tok, Authorization: `Bearer ${tok}`, apikey: this.apiKey, admintoken: this.adminToken };
-        const payload = { number: (message as any).number, text: (message as any).text || (message as any).message, instance: instanceName, access_token: tok } as any;
+        const payload = {
+          number: (message as any).number,
+          phone: (message as any).number,
+          text: (message as any).text || (message as any).message,
+          message: (message as any).text || (message as any).message,
+          instance: instanceName,
+          access_token: tok
+        } as any;
         const paths = [
           `/send/text`,
           `/send/text/${instanceName}`,
           `/message/sendText`,
           `/message/text`,
+          `/message/send`,
+          `/messages/send`,
           `/api/message/text/${instanceName}`,
-          `/api/message/sendText/${instanceName}`
+          `/api/message/sendText/${instanceName}`,
+          `/api/message/send/${instanceName}`,
+          `/api/message/send`,
+          `/sendMessage`,
+          `/api/sendMessage`
         ];
         for (const p of paths) {
           try {
@@ -373,14 +386,17 @@ class UAZAPI {
         return this.sendMediaGeneric(message.type || 'video', instanceName, message, tokenOverride);
     }
 
-    private async sendMediaGeneric(kind: string, instanceName: string, message: any, tokenOverride?: string): Promise<any> {
+  private async sendMediaGeneric(kind: string, instanceName: string, message: any, tokenOverride?: string): Promise<any> {
         const tok = tokenOverride || this.instanceTokens[instanceName] || this.adminToken;
         const headers: any = { token: tok, Authorization: `Bearer ${tok}`, apikey: this.apiKey, admintoken: this.adminToken };
         const payload = {
           number: (message as any).number,
+          phone: (message as any).number,
           type: kind,
           file: (message as any).media || (message as any).url || (message as any).file,
+          url: (message as any).media || (message as any).url || (message as any).file,
           text: (message as any).caption || (message as any).text,
+          caption: (message as any).caption || (message as any).text,
           docName: (message as any).docName,
           instance: instanceName,
           access_token: tok
@@ -388,7 +404,12 @@ class UAZAPI {
         const paths = [
           `/send/media`,
           `/send/media/${instanceName}`,
-          `/message/sendMedia/${instanceName}`
+          `/message/sendMedia/${instanceName}`,
+          `/message/sendMedia`,
+          `/api/message/sendMedia/${instanceName}`,
+          `/api/message/sendMedia`,
+          `/message/sendFile/${instanceName}`,
+          `/message/sendFile`
         ];
         for (const p of paths) {
           try {

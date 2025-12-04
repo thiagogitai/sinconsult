@@ -59,7 +59,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             
             {/* Logo Sim Consult Style */}
             <div className="flex items-center space-x-3">
-              <img src="/logo-sim-consult.svg" alt="Sim Consult" className="h-12 w-auto drop-shadow-lg" />
+              <img src="/logo.png" alt="Sim Consult" className="h-12 w-auto drop-shadow-lg" />
               <div className="hidden sm:block">
                 <h1 className="text-xl font-bold bg-gradient-to-r from-gray-700 to-gray-800 bg-clip-text text-transparent">Sim Consult</h1>
                 <p className="text-xs text-gray-500 font-medium">WhatsApp Business CRM</p>

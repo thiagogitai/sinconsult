@@ -20,18 +20,23 @@ const Schedules: React.FC = () => {
       
       // Filtrar apenas campanhas agendadas
       const scheduled = (Array.isArray(campaigns) ? campaigns : [])
-        .filter((c: any) => (c.scheduled_time || c.schedule_time || c.scheduled_at) && c.status === 'scheduled')
-        .map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          time: new Date(c.scheduled_time || c.schedule_time || c.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          date: new Date(c.scheduled_time || c.schedule_time || c.scheduled_at).toLocaleDateString('pt-BR'),
-          status: c.status,
-          lastRun: null,
-          nextRun: c.scheduled_time || c.schedule_time || c.scheduled_at,
-          frequency: 'Única',
-          channel: c.channel || 'whatsapp'
-        }));
+        .filter((c: any) => (c.schedule_time || c.scheduled_time || c.scheduled_at) && c.status === 'scheduled')
+        .map((c: any) => {
+          const raw = c.schedule_time || c.scheduled_time || c.scheduled_at;
+          const str = typeof raw === 'string' ? raw.replace('T', ' ').replace('Z', '').trim() : '';
+          const [datePart, timePart] = str.includes(' ') ? str.split(' ') : [str, ''];
+          return {
+            id: c.id,
+            name: c.name,
+            time: timePart || '',
+            date: datePart || '',
+            status: c.status,
+            lastRun: null,
+            nextRun: str,
+            frequency: 'Única',
+            channel: c.channel || 'whatsapp'
+          };
+        });
       
       setSchedules(scheduled);
     } catch (error) {
@@ -143,9 +148,9 @@ const Schedules: React.FC = () => {
               <p className="text-sm text-gray-500 mt-2">Crie uma campanha agendada para ver aqui</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               {schedules.map((schedule) => (
-                <div key={schedule.id} className="border border-gray-200 rounded-lg p-6">
+                <div key={schedule.id} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
                       <Clock className="h-6 w-6 text-green-600" />
@@ -163,16 +168,15 @@ const Schedules: React.FC = () => {
                       </span>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="space-y-2 mb-4">
+                    <div className="bg-gray-50 rounded-lg p-3">
                       <div className="flex items-center space-x-2 mb-2">
                         <Calendar className="h-4 w-4 text-gray-600" />
                         <span className="text-sm font-medium text-gray-900">Data e Hora</span>
                       </div>
                       <p className="text-sm text-gray-600">{schedule.date} às {schedule.time}</p>
                     </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="bg-gray-50 rounded-lg p-3">
                       <div className="flex items-center space-x-2 mb-2">
                         <Clock className="h-4 w-4 text-gray-600" />
                         <span className="text-sm font-medium text-gray-900">Status</span>

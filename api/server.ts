@@ -4665,6 +4665,31 @@ app.post('/api/whatsapp/groups/by-contacts', authenticateToken, asyncHandler(asy
     }
   }));
 
+// Salvar token da instância UAZAPI (requer autenticação)
+app.post('/api/whatsapp/instances/save-token', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { name, token } = req.body as any;
+    const tok = String(token || '').trim();
+    if (!tok) return res.status(400).json({ success: false, error: 'Token é obrigatório' });
+
+    const targets = (name && String(name).trim())
+      ? Array.from(new Set([String(name).trim(), String(name).trim().toUpperCase(), String(name).trim().toLowerCase()]))
+      : Array.from(new Set(['SIM4', 'sim4', 'SIMCONSULT', 'simconsult']));
+
+    const saved: string[] = [];
+    for (const n of targets) {
+      await dbRun('INSERT OR REPLACE INTO app_settings (key, value, category) VALUES (?,?,?)', [`uazapiToken:${n}`, tok, 'uazapi']);
+      try { (uazapi as any).setInstanceToken(n, tok); } catch {}
+      saved.push(n);
+    }
+
+    res.json({ success: true, saved_for: saved });
+  } catch (error: any) {
+    logger.error('Erro ao salvar token da instância:', { error: error.message });
+    res.status(500).json({ success: false, error: 'Erro ao salvar token', details: error.message });
+  }
+}));
+
 // Desconectar instância (requer autenticação)
 app.post('/api/whatsapp/instances/:id/disconnect', authenticateToken, asyncHandler(async (req, res) => {
   try {
@@ -4864,11 +4889,14 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
     // Ajustar token da instância no cliente UAZAPI, se existir
     let instToken: string | null = null;
     try {
-      const keyName = `uazapiToken:${instance.name || instance.instance_id}`;
-      const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [keyName, 'uazapi']);
-      instToken = tokRow?.value ? String(tokRow.value).trim() : null;
-      if (instToken) {
-        // Não alterar baseURL; apenas usar token da instância em headers de envio
+      const variants = [
+        `uazapiToken:${instance.name || instance.instance_id}`,
+        `uazapiToken:${String(instance.name || instance.instance_id || '').toLowerCase()}`,
+        `uazapiToken:${String(instance.name || instance.instance_id || '').toUpperCase()}`
+      ];
+      for (const k of variants) {
+        const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [k, 'uazapi']);
+        if (tokRow?.value) { instToken = String(tokRow.value).trim(); break; }
       }
     } catch {}
 
@@ -4909,6 +4937,13 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
       }
 
       const sendTo = normalizedPhone;
+      try {
+        const ok = await uazapi.checkNumber(instance.name || instance_id, sendTo);
+        if (!ok) {
+          await dbRun('UPDATE messages SET status = ?, error_message = ? WHERE id = ?', ['failed', 'Número inválido para envio', messageRecord.id]);
+          return res.status(400).json({ success: false, error: 'Número inválido para envio' });
+        }
+      } catch {}
       if (message_type === 'image' && finalMedia) {
         sentMessage = await uazapi.sendImage(instance.name || instance_id, {
           number: sendTo,
@@ -4933,17 +4968,15 @@ app.post('/api/messages/send', authenticateToken, validate(schemas.sendMessage),
         }, instToken);
       }
 
-      // Atualizar status da mensagem
       await dbRun(`
         UPDATE messages 
-        SET status = ?, sent_at = ?, error_message = NULL
+        SET status = 'sent', sent_at = ?, error_message = NULL
         WHERE id = ?
-      `, ['sent', new Date().toISOString(), messageRecord.id]);
+      `, [new Date().toISOString(), messageRecord.id]);
 
       res.json({
         success: true,
         message_id: messageRecord.id,
-        evolution_id: sentMessage.key?.id || null,
         status: 'sent'
       });
 
@@ -5191,6 +5224,13 @@ class MessageQueue {
 
       const forced = getForcedPhone();
       const targetPhone = forced || contact.phone;
+      try {
+        const ok = await uazapi.checkNumber(instance_id, targetPhone);
+        if (!ok) {
+          await dbRun('UPDATE messages SET status = ?, error_message = ? WHERE id = ?', ['failed', 'Número inválido para envio', messageResult.lastID]);
+          return;
+        }
+      } catch {}
       if (message_type === 'image' && finalMedia) {
         sentMessage = await uazapi.sendImage(instance_id, {
           number: targetPhone,
@@ -5241,30 +5281,31 @@ class MessageQueue {
 // Função auxiliar para obter conteúdo da mídia (URL ou Base64)
 async function getMediaContent(url: string): Promise<string> {
   try {
-    logger.info(`[getMediaContent] Processando URL: ${url}`);
+    const clean = String(url || '').replace(/`/g, '').trim();
+    logger.info(`[getMediaContent] Processando URL: ${clean}`);
 
-    if (!url) {
+    if (!clean) {
       logger.warn('[getMediaContent] URL vazia');
       return '';
     }
 
     // A Evolution API externa consegue baixar diretamente de URLs públicas (mesmo do nosso domínio)
-    if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
+    if (clean.startsWith('http') && !clean.includes('localhost') && !clean.includes('127.0.0.1')) {
       logger.info('[getMediaContent] URL remota/pública detectada, retornando original');
-      return url;
+      return clean;
     }
 
     // Se for local, ler arquivo e converter para Base64
-    let filePath = url;
+    let filePath = clean;
 
     // Remover prefixo de URL se existir (http://localhost:3006/api/uploads/image.jpg -> /api/uploads/image.jpg)
-    if (url.startsWith('http')) {
+    if (clean.startsWith('http')) {
       try {
-        const urlObj = new URL(url);
+        const urlObj = new URL(clean);
         filePath = urlObj.pathname;
       } catch (e) {
         // Se não for URL válida, usar como está
-        filePath = url;
+        filePath = clean;
       }
     }
 
@@ -5301,7 +5342,7 @@ async function getMediaContent(url: string): Promise<string> {
           filePath = altPath2;
         } else {
           logger.error(`[getMediaContent] Arquivo não encontrado em nenhum caminho alternativo`);
-          return url; // Retorna URL original se falhar
+          return clean;
         }
       }
     }
@@ -5626,13 +5667,11 @@ async function processCampaignWithQueue(campaign: any, contactIds: string[]) {
             if (sent) {
               logger.info(`Mensagem enviada para ${contact.phone}`);
 
-              // Atualizar status da mensagem
-              const evoId = resp?.key?.id || null;
-              await dbRun(`
-                UPDATE messages 
-                SET status = 'sent', sent_at = CURRENT_TIMESTAMP, error_message = NULL, evolution_id = COALESCE(?, evolution_id)
-                WHERE id = ?
-              `, [evoId, messageResult.lastID]);
+            await dbRun(`
+              UPDATE messages 
+              SET status = 'sent', sent_at = CURRENT_TIMESTAMP, error_message = NULL
+              WHERE id = ?
+            `, [messageResult.lastID]);
             }
 
           } catch (sendError) {
@@ -6033,15 +6072,13 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
 
     // Criar registro de mensagem
     await dbRun(`
-      INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at, evolution_id)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+      INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at)
+      VALUES (?, ?, ?, ?, 'sent', CURRENT_TIMESTAMP)
     `, [
       contact.id,
       'Teste de envio de imagem 🖼️',
       'image',
-      finalMediaUrl,
-      'sent',
-      sentMessage?.key?.id || null
+      finalMediaUrl
     ]);
 
     res.json({
@@ -6065,7 +6102,7 @@ app.post('/api/test/send-image', authenticateToken, asyncHandler(async (req, res
 }));
 
 // ===== ROTA DE TESTE DE ENVIO DE TEXTO (sem autenticação) =====
-app.post('/api/test/send-text', asyncHandler(async (req, res) => {
+  app.post('/api/test/send-text', asyncHandler(async (req, res) => {
   try {
     const { phone_number, message } = req.body;
     const testPhone = phone_number || '65981173624';
@@ -6098,21 +6135,71 @@ app.post('/api/test/send-text', asyncHandler(async (req, res) => {
     const sentMessage = await uazapi.sendTextMessage(instance.name || instance.instance_id, { number: testPhone, text: message || 'Teste de envio de texto' }, instTok);
 
     await dbRun(`
-      INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at, evolution_id)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+      INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at)
+      VALUES (?, ?, ?, ?, 'sent', CURRENT_TIMESTAMP)
     `, [
       contact.id,
       message || 'Teste de envio de texto',
       'text',
-      null,
-      'sent',
-      sentMessage?.key?.id || null
+      null
     ]);
 
     res.json({ success: true, data: { phone: testPhone, instance: instance.name || instance.instance_id } });
   } catch (error: any) {
     logger.error('Erro ao enviar texto de teste:', { error: error.message, stack: error.stack });
     res.status(500).json({ success: false, error: 'Erro ao enviar texto', message: error.message });
+  }
+  }));
+
+// Teste de texto usando especificamente a instância SIM4 (sem autenticação)
+app.post('/api/test/send-text-sim4', asyncHandler(async (req, res) => {
+  try {
+    const { phone_number, message } = req.body;
+    const testPhone = phone_number || '65981173624';
+
+    const instance = await dbGet(`
+      SELECT * FROM whatsapp_instances 
+      WHERE (name = 'SIM4' OR instance_id = 'SIM4') AND status IN ('connected','open') 
+      ORDER BY updated_at DESC 
+      LIMIT 1
+    `);
+
+    if (!instance) {
+      return res.status(400).json({ success: false, error: 'Instância SIM4 não está conectada' });
+    }
+
+    const normalizedPhone = normalizePhone(testPhone);
+    let contact = await dbGet('SELECT * FROM contacts WHERE phone = ?', [normalizedPhone]);
+    if (!contact) {
+      const result = await dbRun('INSERT INTO contacts (name, phone, is_blocked, is_active) VALUES (?, ?, false, true)', ['Teste', normalizedPhone]);
+      contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [result.lastID]);
+    }
+
+    const keys = [`uazapiToken:SIM4`, `uazapiToken:sim4`];
+    let instTok: string | undefined;
+    for (const k of keys) {
+      const tokRow: any = await dbGet('SELECT value FROM app_settings WHERE key = ? AND category = ?', [k, 'uazapi']);
+      if (tokRow?.value) { instTok = String(tokRow.value).trim(); break; }
+    }
+
+    const ok = await uazapi.checkNumber(instance.name || instance.instance_id, normalizedPhone).catch(() => true);
+    if (!ok) return res.status(400).json({ success: false, error: 'Número inválido para envio' });
+
+    const sentMessage = await uazapi.sendTextMessage(instance.name || instance.instance_id, { number: normalizedPhone, text: message || 'Teste SIM4' }, instTok);
+    await dbRun(`
+      INSERT INTO messages (contact_id, content, message_type, media_url, status, sent_at)
+      VALUES (?, ?, ?, ?, 'sent', CURRENT_TIMESTAMP)
+    `, [
+      contact.id,
+      message || 'Teste SIM4',
+      'text',
+      null
+    ]);
+
+    res.json({ success: true, data: { phone: normalizedPhone, instance: instance.name || instance.instance_id, status: 'sent' } });
+  } catch (error: any) {
+    logger.error('Erro ao enviar texto de teste SIM4:', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: 'Erro ao enviar texto (SIM4)', message: error.message });
   }
 }));
 
